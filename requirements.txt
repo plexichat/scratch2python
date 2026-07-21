@@ -1,11 +1,3 @@
-# scratch2python - dependencies
-#
-# This project has NO third-party Python dependencies.
-# It uses only Python 3 standard library modules:
-#   argparse, ast, collections, importlib, json, logging, math, os,
-#   pathlib, py_compile, re, shutil, stat, sys
-#
-# The generated output code (main.py) also uses only stdlib:
-#   tkinter, time, traceback (and conditionally ctypes, atexit on Windows)
-#
-# Requirements: Python 3.10+
+Pillow>=10.0.0
+psutil>=5.9.0
+resvg-py>=0.1.0

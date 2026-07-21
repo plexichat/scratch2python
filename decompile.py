@@ -8079,6 +8079,15 @@ def _generate_main(ir_data, output_dir, generated, opts=None):
     out_path = output_dir / "main.py"
     out_path.write_text("\n".join(lines), encoding="utf-8")
     log.info("emitted main.py")
+
+    # Emit a requirements.txt for the generated project's runtime dependencies.
+    _req_lines = """# Runtime dependencies for the decompiled Scratch project.
+# Install with: pip install -r requirements.txt
+numpy>=1.24.0
+sounddevice>=0.4.6
+"""
+    (output_dir / "requirements.txt").write_text(_req_lines, encoding="utf-8")
+    log.info("emitted requirements.txt")
     return out_path
 
 
