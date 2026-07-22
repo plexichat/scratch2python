@@ -95,8 +95,10 @@ STMT_SIMPLE = {
     "sound_play":               "play sound %s",
     "sound_playuntildone":      "play sound %s until done",
     "sound_stopallsounds":      "stop all sounds",
+    "sound_cleareffects":       "clear sound effects",
     "sound_setvolumeto":        "set volume to %s",
     "sound_changevolumeby":     "change volume by %s",
+    "sensing_setdragmode":      "set drag mode %s",
     "sensing_resettimer":       "reset timer",
 }
 
@@ -546,10 +548,7 @@ def _fold_expr(node):
                 vv = v["v"]
                 na, nb = _opt_num(acc), _opt_num(vv)
                 if op in ("operator_add",):
-                    if isinstance(acc, str) or isinstance(vv, str):
-                        acc = _opt_str(acc) + _opt_str(vv)
-                    else:
-                        acc = na + nb
+                    acc = na + nb
                 elif op == "operator_multiply":
                     acc = na * nb
                 elif op == "operator_and":
@@ -1226,11 +1225,6 @@ def _collapse_duplicates(body):
                 if lop_fields.get("VARIABLE") == sop_fields.get("VARIABLE"):
                     if str(lop_args.get("VALUE")) == str(sop_args.get("VALUE")):
                         continue
-            # 13. Consecutive same broadcast
-            if lop == "event_broadcast" and sop == "event_broadcast":
-                if str(lop_args.get("BROADCAST_INPUT") or lop_args.get("BROADCAST")) == \
-                   str(sop_args.get("BROADCAST_INPUT") or sop_args.get("BROADCAST")):
-                    continue
             # 14. Consecutive show/hide
             if lop == "looks_show" and sop == "looks_show":
                 continue
@@ -1752,6 +1746,11 @@ def _collect_external_sensing_reads(all_targets):
                     elif isinstance(obj, dict) and obj.get("kind") == "var":
                         # Can't statically determine target - skip
                         pass
+                    elif isinstance(obj, dict):
+                        # Dynamic target name - conservatively mark all targets
+                        if prop:
+                            for t in all_targets:
+                                external[t.get("name", "")].add(prop)
             for v in node.get("args", {}).values() if isinstance(node.get("args"), dict) else ():
                 _scan_expr(v, owning_target_name)
             if isinstance(node.get("args"), list):
@@ -3306,7 +3305,7 @@ class _PyEmitter:
 
         if op in ("motion_xposition", "motion_yposition", "motion_direction"):
             m = {"motion_xposition": "sp.x", "motion_yposition": "sp.y",
-                 "motion_direction": "sp.direction"}
+                 "motion_direction": "((sp.direction + 180) % 360) - 180"}
             return m[op]
 
         if op == "looks_size":
@@ -3316,8 +3315,8 @@ class _PyEmitter:
             # Check NUMBER_NAME field: "name" returns costume name, "number" returns index
             num_name = f.get("NUMBER_NAME", "number")
             if num_name == "name":
-                return "(sp.costumes[sp._costume_index].get('name', '') if sp.costumes else '')"
-            return "sp._costume_index + 1"
+                return "(sp.costumes[sp._costume_index].get('name', '') if sp.costumes and 0 <= sp._costume_index < len(sp.costumes) else '')"
+            return "(sp._costume_index + 1 if sp.costumes else 0)"
 
         if op == "looks_backdropnumbername":
             # Check NUMBER_NAME field: "name" returns backdrop name, "number" returns index
@@ -3450,19 +3449,21 @@ class _PyEmitter:
         if op == "control_wait":
             duration = self._expr(a.get('DURATION'))
             if self._warp:
-                return ""
+                return f"{pad}# warp-mode: wait {duration} stripped (Scratch turns off warp on wait)"
             return (f"{pad}_wstart = time.time()\n"
                     f"{pad}while time.time() - _wstart < _num({duration}):\n"
                     f"{pad}    yield")
         if op == "control_wait_until":
             body = f"{pad}while not {self._expr(a.get('CONDITION'))}:\n{pad}  yield"
-            return body if not self._warp else ""
+            if self._warp:
+                return f"{pad}# warp-mode: wait until stripped (Scratch turns off warp on wait)"
+            return body
         if op == "control_stop":
             mode = self._expr(f.get("STOP_OPTION"))
             if mode == "'all'":
                 return f"{pad}return '__STOP_ALL__'"
             if mode == "'other scripts in sprite'":
-                return f"{pad}return '__STOP_OTHER__'"
+                return f"{pad}_eng._stop_other_scripts(sp.name)"
             return f"{pad}return"
         if op == "control_start_as_clone":
             body = self._emit_body(s.get("sub", []), indent)
@@ -3501,9 +3502,11 @@ class _PyEmitter:
 
         # motion
         if op == "motion_setx":
-            return f"{pad}sp.x = {self._num_expr(a.get('X'))}"
+            return (f"{pad}sp.x = {self._num_expr(a.get('X'))}\n"
+                    f"{pad}if _eng and _eng.display: _eng.display.pen_move(sp, sp.x, sp.y)")
         if op == "motion_sety":
-            return f"{pad}sp.y = {self._num_expr(a.get('Y'))}"
+            return (f"{pad}sp.y = {self._num_expr(a.get('Y'))}\n"
+                    f"{pad}if _eng and _eng.display: _eng.display.pen_move(sp, sp.x, sp.y)")
         if op == "motion_changexby":
             return (f"{pad}sp.x += {self._num_expr(a.get('DX'))}\n"
                     f"{pad}if _eng and _eng.display: _eng.display.pen_move(sp, sp.x, sp.y)")
@@ -3555,6 +3558,8 @@ class _PyEmitter:
                     f"{pad}sp.direction = (90 - math.degrees(math.atan2(_ty - sp.y, _tx - sp.x))) % 360")
         if op == "motion_setrotationstyle":
             return f"{pad}sp.rotation_style = {f.get('STYLE')!r}"
+        if op == "motion_ifonedgebounce":
+            return f"{pad}if _eng and _eng.display: _eng.display.if_on_edge_bounce(sp)"
 
         # glide blocks (wall-clock paced; suppressed inside warp mode)
         if op == "motion_glidesecstoxy":
@@ -3652,6 +3657,10 @@ class _PyEmitter:
             return f"{pad}if _eng.stage is not None: _eng.stage.set_costume({self._expr(a.get('BACKDROP'))})"
         if op == "looks_nextbackdrop":
             return f"{pad}if _eng.stage is not None: _eng.stage.set_costume(_eng.stage._costume_index + 2)"
+        if op == "looks_switchbackdroptoandwait":
+            back = self._expr(a.get("BACKDROP"))
+            return (f"{pad}if _eng and _eng.display: _eng.display.switch_backdrop({back})\n"
+                    f"{pad}yield")
         if op == "looks_gotofrontback":
             fb = self._expr(a.get("FRONT_BACK") or f.get("FRONT_BACK"))
             return f"{pad}sp.go_to_front_back({fb})"
@@ -3691,9 +3700,13 @@ class _PyEmitter:
             return f"{pad}sp.volume = max(0.0, min(100.0, sp.volume + {self._num_expr(a.get('VOLUME'))}))"
         if op == "sound_stopallsounds":
             return f"{pad}_eng.stop_sounds()"
+        if op == "sound_cleareffects":
+            return f"{pad}sp._sound_effects = {{}}"
 
         if op == "sensing_resettimer":
             return f"{pad}_eng._timer_start = time.time()"
+        if op == "sensing_setdragmode":
+            return f"{pad}sp.drag_mode = {self._expr(a.get('DRAG_MODE'))}"
 
         # sensing ask and wait (non-blocking overlay entry; yields until answered)
         if op == "sensing_askandwait":
@@ -3792,7 +3805,7 @@ class _PyEmitter:
         # Scratch cooperative semantics: a non-warp bounded loop ticks exactly
         # ONE iteration per frame regardless of whether it contains a wait.
         # Always yield once per iteration (warp loops run synchronously instead).
-        y = ""
+        y = "\n" + f"{pad}  yield" if not self._warp else ""
         return f"{pad}for _ in range(int(_num({times}))):\n{body}{y}".rstrip()
 
     def _emit_repeat_until(self, s, indent):
@@ -4011,7 +4024,10 @@ def _generate_engine(output_dir, opts=None):
         "        try:",
         "            return float(s)",
         "        except ValueError:",
-        "            return 0.0",
+        "            try:",
+        "                return float(int(s, 0))",
+        "            except (ValueError, TypeError):",
+        "                return 0.0",
         "    return 0.0",
         "",
         "def _str(v: Any) -> str:",
@@ -4024,8 +4040,6 @@ def _generate_engine(output_dir, opts=None):
         '    return "" if v is None else str(v)',
         "",
         "def _add(a: Any, b: Any) -> Any:",
-        "    if isinstance(a, str) or isinstance(b, str):",
-        "        return _str(a) + _str(b)",
         "    return _num(a) + _num(b)",
         "",
         "def _sub(a: Any, b: Any) -> Any:",
@@ -4037,9 +4051,7 @@ def _generate_engine(output_dir, opts=None):
         "def _div(a: Any, b: Any) -> Any:",
         "    d = _num(b)",
         "    if d == 0:",
-        "        return 0.0",
-        "    if isinstance(d, float) and abs(d) < 1e-6:",
-        "        return 0.0",
+        "        return float('inf') if _num(a) >= 0 else float('-inf')",
         "    return _num(a) / d",
         "",
         "def _mod(a: Any, b: Any) -> Any:",
@@ -4065,22 +4077,16 @@ def _generate_engine(output_dir, opts=None):
         "def _eq(a: Any, b: Any) -> bool:",
         "    if _is_numeric(a) and _is_numeric(b):",
         "        return _num(a) == _num(b)",
-        "    if type(a) is type(b):",
-        "        return a == b",
         "    return str(a).lower() == str(b).lower()",
         "",
         "def _lt(a: Any, b: Any) -> bool:",
         "    if _is_numeric(a) and _is_numeric(b):",
         "        return _num(a) < _num(b)",
-        "    if type(a) is type(b):",
-        "        return a < b",
         "    return str(a).lower() < str(b).lower()",
         "",
         "def _gt(a: Any, b: Any) -> bool:",
         "    if _is_numeric(a) and _is_numeric(b):",
         "        return _num(a) > _num(b)",
-        "    if type(a) is type(b):",
-        "        return a > b",
         "    return str(a).lower() > str(b).lower()",
         "",
         "def _and(a: Any, b: Any) -> bool:",
@@ -4096,7 +4102,8 @@ def _generate_engine(output_dir, opts=None):
         "    lo, hi = _num(a), _num(b)",
         "    if lo > hi:",
         "        lo, hi = hi, lo",
-        "    if float(lo).is_integer() and float(hi).is_integer():",
+        "    # Scratch: if either original input had a decimal point, return float",
+        "    if '.' not in str(a) and '.' not in str(b):",
         "        return float(random.randint(int(lo), int(hi)))",
         "    return lo + random.random() * (hi - lo)",
         "",
@@ -5419,6 +5426,24 @@ def _generate_engine(output_dir, opts=None):
         "    p = sp.pen_params",
         "    sp.pen_color = _hsbt_to_rgba(p['color'], p['saturation'], p['brightness'], p['transparency'])",
         "",
+        "def _rgba_to_hsbt(r, g, b, a=255):",
+        "    r, g, b = r / 255.0, g / 255.0, b / 255.0",
+        "    cmax = max(r, g, b)",
+        "    cmin = min(r, g, b)",
+        "    delta = cmax - cmin",
+        "    brightness = cmax",
+        "    saturation = 0.0 if cmax == 0 else delta / cmax",
+        "    if delta == 0:",
+        "        hue = 0.0",
+        "    elif cmax == r:",
+        "        hue = 60.0 * (((g - b) / delta) % 6)",
+        "    elif cmax == g:",
+        "        hue = 60.0 * (((b - r) / delta) + 2)",
+        "    else:",
+        "        hue = 60.0 * (((r - g) / delta) + 4)",
+        "    hue = (hue / 360.0) * 100.0",
+        "    return (hue % 100.0, saturation * 100.0, brightness * 100.0, (1.0 - a / 255.0) * 100.0)",
+        "",
         "def _display_setcolor(sp, cv: Any):",
         "    if not sp: return",
         "    val = _str(cv).strip()",
@@ -5428,9 +5453,19 @@ def _generate_engine(output_dir, opts=None):
         "            if len(h) == 6:",
         "                r, g, b = int(h[0:2], 16), int(h[2:4], 16), int(h[4:6], 16)",
         "                sp.pen_color = (r, g, b, 255)",
+        "                h_, s, b_, t = _rgba_to_hsbt(r, g, b, 255)",
+        "                sp.pen_params['color'] = h_",
+        "                sp.pen_params['saturation'] = s",
+        "                sp.pen_params['brightness'] = b_",
+        "                sp.pen_params['transparency'] = t",
         "            elif len(h) == 8:",
         "                r, g, b, a = int(h[0:2], 16), int(h[2:4], 16), int(h[4:6], 16), int(h[6:8], 16)",
         "                sp.pen_color = (r, g, b, a)",
+        "                h_, s, b_, t = _rgba_to_hsbt(r, g, b, a)",
+        "                sp.pen_params['color'] = h_",
+        "                sp.pen_params['saturation'] = s",
+        "                sp.pen_params['brightness'] = b_",
+        "                sp.pen_params['transparency'] = t",
         "        except Exception:",
         "            pass",
         "    else:",
@@ -5441,6 +5476,11 @@ def _generate_engine(output_dir, opts=None):
         "            _g = (_cv >> 8) & 0xFF",
         "            _b = _cv & 0xFF",
         "            sp.pen_color = (_r, _g, _b, _a if _a else 255)",
+        "            h_, s, b_, t = _rgba_to_hsbt(_r, _g, _b, _a if _a else 255)",
+        "            sp.pen_params['color'] = h_",
+        "            sp.pen_params['saturation'] = s",
+        "            sp.pen_params['brightness'] = b_",
+        "            sp.pen_params['transparency'] = t",
         "        except (ValueError, TypeError):",
         "            pass",
         "",
@@ -5476,14 +5516,20 @@ def _generate_engine(output_dir, opts=None):
         "    if sp:",
         "        key = _str(param).lower()",
         "        if key in sp.pen_params:",
-        "            sp.pen_params[key] = max(0.0, min(100.0, _num(val)))",
+        "            if key == 'color':",
+        "                sp.pen_params[key] = _num(val) % 100.0",
+        "            else:",
+        "                sp.pen_params[key] = max(0.0, min(100.0, _num(val)))",
         "            _hsbt_apply(sp)",
         "",
         "def _display_changepencolorparam(sp, param: Any, val: Any):",
         "    if sp:",
         "        key = _str(param).lower()",
         "        if key in sp.pen_params:",
-        "            sp.pen_params[key] = max(0.0, min(100.0, sp.pen_params[key] + _num(val)))",
+        "            if key == 'color':",
+        "                sp.pen_params[key] = (sp.pen_params[key] + _num(val)) % 100.0",
+        "            else:",
+        "                sp.pen_params[key] = max(0.0, min(100.0, sp.pen_params[key] + _num(val)))",
         "            _hsbt_apply(sp)",
         "",
         "",
