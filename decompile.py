@@ -19,6 +19,7 @@ import logging
 import os
 import re
 import sys
+import math as _math_mod
 from collections import defaultdict
 from pathlib import Path
 
@@ -225,7 +226,7 @@ class IRParser:
         self.blocks = {k: v for k, v in target["blocks"].items() if isinstance(v, dict)}
         self.broadcasts = broadcasts
         self.var_names = {vid: v[0] for vid, v in target.get("variables", {}).items()}
-        self.list_names = {lid: l[0] for lid, l in target.get("lists", {}).items()}
+        self.list_names = {lid: li[0] for lid, li in target.get("lists", {}).items()}
 
     def parse_value(self, inp):
         if inp is None:
@@ -432,9 +433,6 @@ class IRParser:
 #  27. CFG simplification                28. Nested repeat collapse
 # ===================================================================
 
-import math as _math_mod
-from collections import defaultdict
-
 _FOLDABLE_UNARY = frozenset({
     "operator_round", "operator_length", "operator_not",
 })
@@ -499,7 +497,8 @@ def _opt_eq(a, b):
     na, nb = _opt_num(a), _opt_num(b)
     if isinstance(a, (int, float, str)) and isinstance(b, (int, float, str)):
         try:
-            float(_opt_str(a)); float(_opt_str(b))
+            float(_opt_str(a))
+            float(_opt_str(b))
             return na == nb
         except ValueError:
             return _opt_str(a) == _opt_str(b)
@@ -536,9 +535,12 @@ def _fold_expr(node):
     if op in _FOLDABLE_UNARY and _all_const(folded_args) and len(folded_args) >= 1:
         vals = list(folded_args.values())
         a = _opt_num(vals[0]["v"])
-        if op == "operator_round":     return {"kind": "const", "v": round(a)}
-        if op == "operator_length":    return {"kind": "const", "v": float(len(_opt_str(vals[0]["v"])))}
-        if op == "operator_not":       return {"kind": "const", "v": 1.0 if not a else 0.0}
+        if op == "operator_round":
+            return {"kind": "const", "v": round(a)}
+        if op == "operator_length":
+            return {"kind": "const", "v": float(len(_opt_str(vals[0]["v"])))}
+        if op == "operator_not":
+            return {"kind": "const", "v": 1.0 if not a else 0.0}
 
     if op in _FOLDABLE_BINARY and _all_const(folded_args) and len(folded_args) >= 2:
         vals = list(folded_args.values())
@@ -558,30 +560,41 @@ def _fold_expr(node):
             return {"kind": "const", "v": acc}
         a, b = vals[0]["v"], vals[1]["v"]
         na, nb = _opt_num(a), _opt_num(b)
-        if op == "operator_subtract":  return {"kind": "const", "v": na - nb}
-        if op == "operator_divide":    return {"kind": "const", "v": 0.0 if nb == 0 else na / nb}
-        if op == "operator_mod":       return {"kind": "const", "v": 0.0 if nb == 0 else na % nb}
-        if op == "operator_join":      return {"kind": "const", "v": _opt_str(a) + _opt_str(b)}
+        if op == "operator_subtract":
+            return {"kind": "const", "v": na - nb}
+        if op == "operator_divide":
+            return {"kind": "const", "v": 0.0 if nb == 0 else na / nb}
+        if op == "operator_mod":
+            return {"kind": "const", "v": 0.0 if nb == 0 else na % nb}
+        if op == "operator_join":
+            return {"kind": "const", "v": _opt_str(a) + _opt_str(b)}
         if op == "operator_letter_of":
             s, idx = _opt_str(a), int(nb)
             return {"kind": "const", "v": s[idx - 1] if 1 <= idx <= len(s) else ""}
-        if op == "operator_contains":  return {"kind": "const", "v": 1.0 if _opt_str(b) in _opt_str(a) else 0.0}
-        if op in ("operator_equals", "operator_eq"): return {"kind": "const", "v": 1.0 if _opt_eq(a, b) else 0.0}
-        if op == "operator_lt":        return {"kind": "const", "v": 1.0 if na < nb else 0.0}
-        if op == "operator_gt":        return {"kind": "const", "v": 1.0 if na > nb else 0.0}
+        if op == "operator_contains":
+            return {"kind": "const", "v": 1.0 if _opt_str(b) in _opt_str(a) else 0.0}
+        if op in ("operator_equals", "operator_eq"):
+            return {"kind": "const", "v": 1.0 if _opt_eq(a, b) else 0.0}
+        if op == "operator_lt":
+            return {"kind": "const", "v": 1.0 if na < nb else 0.0}
+        if op == "operator_gt":
+            return {"kind": "const", "v": 1.0 if na > nb else 0.0}
 
     if op == "operator_mathop" and _all_const(folded_args) and isinstance(folded_args, dict):
         oper = fields.get("OPERATOR", "")
         x = _opt_num(next(iter(folded_args.values()))["v"])
         if oper.lower() in _FOLDABLE_MATH:
-            if oper.lower() == "pi":  return {"kind": "const", "v": _math_mod.pi}
-            if oper.lower() == "e":   return {"kind": "const", "v": _math_mod.e}
+            if oper.lower() == "pi":
+                return {"kind": "const", "v": _math_mod.pi}
+            if oper.lower() == "e":
+                return {"kind": "const", "v": _math_mod.e}
             table = {"abs": abs, "floor": _math_mod.floor, "ceiling": _math_mod.ceil,
                      "sqrt": _math_mod.sqrt, "round": round}
             if oper.lower() in table:
                 return {"kind": "const", "v": table[oper.lower()](x)}
 
-    node = dict(node); node["args"] = folded_args
+    node = dict(node)
+    node["args"] = folded_args
     return node
 
 
@@ -712,7 +725,8 @@ def _ir_simplify_expr(node):
     """Algebraic/boolean/strength reduction + canonicalisation."""
     if not isinstance(node, dict) or node.get("kind") != "expr":
         return node
-    op = node.get("op", ""); args = node.get("args", {}); fields = node.get("fields", {})
+    op = node.get("op", "")
+    args = node.get("args", {})
     if isinstance(args, dict):
         args = {k: _ir_simplify_expr(v) for k, v in args.items()}
     elif isinstance(args, list):
@@ -733,8 +747,10 @@ def _ir_simplify_expr(node):
               "operator_and", "operator_or") and isinstance(args, dict):
         items = list(args.items())
         if len(items) == 2:
-            k0, v0 = items[0]; k1, v1 = items[1]
-            c0 = _is_const(v0); c1 = _is_const(v1)
+            k0, v0 = items[0]
+            k1, v1 = items[1]
+            c0 = _is_const(v0)
+            c1 = _is_const(v1)
             if c0 and not c1:
                 args = {k1: v1, k0: v0}
             elif op in ("operator_add", "operator_multiply") and isinstance(v0, dict) and isinstance(v1, dict):
@@ -753,7 +769,8 @@ def _ir_simplify_expr(node):
     if op in ("operator_lt", "operator_gt") and isinstance(args, dict):
         items = list(args.items())
         if len(items) == 2:
-            k0, v0 = items[0]; k1, v1 = items[1]
+            k0, v0 = items[0]
+            k1, v1 = items[1]
             if _is_const(v0) and not _is_const(v1):
                 args = {k1: v1, k0: v0}
                 op = "operator_lt" if op == "operator_gt" else "operator_gt"
@@ -775,8 +792,10 @@ def _ir_simplify_expr(node):
         const_zero = [i for i, v in enumerate(vals) if _is_const(v) and _f0(v.get("v"))]
         if const_zero:
             nz = [v for i, v in enumerate(vals) if i not in const_zero]
-            if len(nz) == 0: return {"kind": "const", "v": 0.0}
-            if len(nz) == 1: return nz[0]
+            if len(nz) == 0:
+                return {"kind": "const", "v": 0.0}
+            if len(nz) == 1:
+                return nz[0]
             args = {str(i): v for i, v in enumerate(nz)}
         # x + x → 2*x
         if len(vals) == 2 and not _is_const(vals[0]) and not _is_const(vals[1]):
@@ -787,7 +806,8 @@ def _ir_simplify_expr(node):
     if op == "operator_subtract" and isinstance(args, dict):
         vals = list(args.values())
         if len(vals) == 2:
-            if _is_const(vals[1]) and _f0(vals[1].get("v")): return vals[0]
+            if _is_const(vals[1]) and _f0(vals[1].get("v")):
+                return vals[0]
             if _is_const(vals[0]) and _f0(vals[0].get("v")):
                 return {"kind": "expr", "op": "operator_multiply",
                         "args": {"0": vals[1], "1": {"kind": "const", "v": -1.0}}, "fields": {}}
@@ -803,8 +823,10 @@ def _ir_simplify_expr(node):
         const_one = [i for i, v in enumerate(vals) if _is_const(v) and _f1(v.get("v"))]
         if const_one:
             no = [v for i, v in enumerate(vals) if i not in const_one]
-            if len(no) == 0: return {"kind": "const", "v": 1.0}
-            if len(no) == 1: return no[0]
+            if len(no) == 0:
+                return {"kind": "const", "v": 1.0}
+            if len(no) == 1:
+                return no[0]
             args = {str(i): v for i, v in enumerate(no)}
         # strength: x * 2 → x + x
         if len(vals) == 2:
@@ -819,14 +841,16 @@ def _ir_simplify_expr(node):
     if op == "operator_divide" and isinstance(args, dict):
         vals = list(args.values())
         if len(vals) == 2:
-            if _is_const(vals[1]) and _f1(vals[1].get("v")): return vals[0]
+            if _is_const(vals[1]) and _f1(vals[1].get("v")):
+                return vals[0]
             if vals[0] == vals[1] and not _is_const(vals[0]):
                 return {"kind": "const", "v": 1.0}
 
     if op == "operator_mod" and isinstance(args, dict):
         vals = list(args.values())
         if len(vals) == 2:
-            if _is_const(vals[1]) and _f1(vals[1].get("v")): return {"kind": "const", "v": 0.0}
+            if _is_const(vals[1]) and _f1(vals[1].get("v")):
+                return {"kind": "const", "v": 0.0}
 
     # ---- 4. Boolean literal normalisation ----
     if op == "operator_not" and isinstance(args, dict):
@@ -839,7 +863,8 @@ def _ir_simplify_expr(node):
                 if sub.get("op") == "operator_not":
                     inner = sub.get("args", {})
                     inner_vals = list(inner.values())
-                    if len(inner_vals) == 1: return inner_vals[0]
+                    if len(inner_vals) == 1:
+                        return inner_vals[0]
 
     if op in ("operator_equals", "operator_eq") and isinstance(args, dict):
         vals = list(args.values())
@@ -857,17 +882,27 @@ def _ir_simplify_expr(node):
         vals = list(args.values())
         if len(vals) == 2:
             if op == "operator_and":
-                if _is_const(vals[0]) and vals[0].get("v"): return vals[1]
-                if _is_const(vals[1]) and vals[1].get("v"): return vals[0]
-                if _is_const(vals[0]) and not vals[0].get("v"): return vals[0]
-                if _is_const(vals[1]) and not vals[1].get("v"): return vals[1]
+                if _is_const(vals[0]) and vals[0].get("v"):
+                    return vals[1]
+                if _is_const(vals[1]) and vals[1].get("v"):
+                    return vals[0]
+                if _is_const(vals[0]) and not vals[0].get("v"):
+                    return vals[0]
+                if _is_const(vals[1]) and not vals[1].get("v"):
+                    return vals[1]
             if op == "operator_or":
-                if _is_const(vals[0]) and vals[0].get("v"): return vals[0]
-                if _is_const(vals[1]) and vals[1].get("v"): return vals[1]
-                if _is_const(vals[0]) and not vals[0].get("v"): return vals[1]
-                if _is_const(vals[1]) and not vals[1].get("v"): return vals[0]
+                if _is_const(vals[0]) and vals[0].get("v"):
+                    return vals[0]
+                if _is_const(vals[1]) and vals[1].get("v"):
+                    return vals[1]
+                if _is_const(vals[0]) and not vals[0].get("v"):
+                    return vals[1]
+                if _is_const(vals[1]) and not vals[1].get("v"):
+                    return vals[0]
 
-    node = dict(node); node["args"] = args; node["op"] = op
+    node = dict(node)
+    node["args"] = args
+    node["op"] = op
     return node
 
 
@@ -1144,21 +1179,26 @@ def _is_noop_stmt(s):
     if op == "motion_changexby":
         val = args.get("DX", {})
         if isinstance(val, dict) and val.get("kind") == "const":
-            if val.get("v") in (0, 0.0): return True
+            if val.get("v") in (0, 0.0):
+                return True
     if op == "motion_changeyby":
         val = args.get("DY", {})
         if isinstance(val, dict) and val.get("kind") == "const":
-            if val.get("v") in (0, 0.0): return True
+            if val.get("v") in (0, 0.0):
+                return True
     if op == "motion_turnright":
         val = args.get("DEGREES", {})
         if isinstance(val, dict) and val.get("kind") == "const":
-            if val.get("v") in (0, 0.0): return True
+            if val.get("v") in (0, 0.0):
+                return True
     if op == "motion_turnleft":
         val = args.get("DEGREES", {})
         if isinstance(val, dict) and val.get("kind") == "const":
-            if val.get("v") in (0, 0.0): return True
+            if val.get("v") in (0, 0.0):
+                return True
     if op == "motion_gotoxy":
-        xv = args.get("X", {}); yv = args.get("Y", {})
+        xv = args.get("X", {})
+        yv = args.get("Y", {})
         if isinstance(xv, dict) and xv.get("kind") == "var" and isinstance(yv, dict) and yv.get("kind") == "var":
             if xv.get("name") == "x position" and yv.get("name") == "y position":
                 return True
@@ -1172,7 +1212,8 @@ def _is_noop_stmt(s):
     if op == "motion_movesteps":
         val = args.get("STEPS", {})
         if isinstance(val, dict) and val.get("kind") == "const":
-            if val.get("v") in (0, 0.0): return True
+            if val.get("v") in (0, 0.0):
+                return True
     return False
 
 
@@ -1213,8 +1254,12 @@ def _collapse_duplicates(body):
         s = dict(s)
         if out:
             last = out[-1]
-            lop = last.get("op"); lop_args = last.get("args", {}); lop_fields = last.get("fields", {})
-            sop = s.get("op"); sop_args = s.get("args", {}); sop_fields = s.get("fields", {})
+            lop = last.get("op")
+            lop_args = last.get("args", {})
+            lop_fields = last.get("fields", {})
+            sop = s.get("op")
+            sop_args = s.get("args", {})
+            sop_fields = s.get("fields", {})
             # 14. Consecutive identical data_setvariableto (same var, same value)
             if lop == "data_setvariableto" and sop == "data_setvariableto":
                 if lop_fields.get("VARIABLE") == sop_fields.get("VARIABLE"):
@@ -1313,7 +1358,6 @@ def _licm_write_set(body):
     """Return set of variable names written (data_setvariableto / data_changevariableby) in body."""
     writes = set()
     # Check if body contains any procedure call or broadcast - if so, be conservative
-    has_side_effect_call = False
     def _has_side_effect(body):
         for s in body:
             op = s.get("op", "")
@@ -1694,8 +1738,10 @@ def _elim_dead_procedures(procedures, hats):
         for s in body:
             if s["op"] == "procedures_call":
                 live.add(s.get("fields", {}).get("PROCCODE", s.get("args", {}).get("PROCCODE", "")))
-            if s.get("sub"): _find_live_calls(s["sub"])
-            if s.get("sub2"): _find_live_calls(s["sub2"])
+            if s.get("sub"):
+                _find_live_calls(s["sub"])
+            if s.get("sub2"):
+                _find_live_calls(s["sub2"])
     for h in hats:
         _find_live_calls(h["body"])
     # Iteratively find live procedures (called by other live procedures)
@@ -1893,7 +1939,8 @@ def _collapse_nested_repeats(body):
                 inner = sub[0]
                 inner_times = inner.get("args", {}).get("TIMES", {})
                 if outer_times.get("kind") == "const" and inner_times.get("kind") == "const":
-                    ov = outer_times.get("v", 0); iv = inner_times.get("v", 0)
+                    ov = outer_times.get("v", 0)
+                    iv = inner_times.get("v", 0)
                     if isinstance(ov, (int, float)) and isinstance(iv, (int, float)):
                         combined = int(ov) * int(iv)
                         s["args"]["TIMES"] = {"kind": "const", "v": float(combined)}
@@ -1909,7 +1956,8 @@ def _ir_simplify_body(body):
     out = []
     for s in body:
         s = dict(s)
-        op = s["op"]; args = s.get("args", {}); fields = s.get("fields", {})
+        op = s["op"]
+        args = s.get("args", {})
 
         s["args"] = {k: _ir_simplify_expr(v) for k, v in args.items()}
 
@@ -1948,7 +1996,8 @@ def _ir_simplify_body(body):
                     continue
             # if-else where one branch is empty
             if op == "control_if_else":
-                sub = s.get("sub", []); sub2 = s.get("sub2", [])
+                sub = s.get("sub", [])
+                sub2 = s.get("sub2", [])
                 if not sub and not sub2:
                     continue
                 if not sub:
@@ -1960,10 +2009,12 @@ def _ir_simplify_body(body):
                         "args": {"0": cond}, "fields": {}
                     }
                     s["sub"] = sub2
-                    if "sub2" in s: del s["sub2"]
+                    if "sub2" in s:
+                        del s["sub2"]
                 elif not sub2:
                     s["op"] = "control_if"
-                    if "sub2" in s: del s["sub2"]
+                    if "sub2" in s:
+                        del s["sub2"]
 
         # 11. Empty-loop elimination (repeat/forever with empty body)
         # Only delete truly useless loops: repeat/forever with empty body.
@@ -1983,14 +2034,16 @@ def _ir_simplify_body(body):
             if isinstance(cond, dict) and cond.get("kind") == "const":
                 if cond.get("v", 0.0):
                     continue  # repeat until True = never executes
-                s["op"] = "control_forever"; s["args"] = {}
+                s["op"] = "control_forever"
+                s["args"] = {}
 
         # 18. while true → forever
         if op == "control_while":
             cond = s["args"].get("CONDITION", {})
             if isinstance(cond, dict) and cond.get("kind") == "const":
                 if cond.get("v", 0.0):
-                    s["op"] = "control_forever"; s["args"] = {}
+                    s["op"] = "control_forever"
+                    s["args"] = {}
                 else:
                     continue
 
@@ -2002,8 +2055,10 @@ def _ir_simplify_body(body):
                 if isinstance(tv, (int, float)):
                     itv = int(tv)
                 else:
-                    try: itv = int(tv)
-                    except (ValueError, TypeError): itv = 0
+                    try:
+                        itv = int(tv)
+                    except (ValueError, TypeError):
+                        itv = 0
                 if itv <= 0:
                     continue
                 if itv == 1:
@@ -2176,7 +2231,6 @@ def _replace_arg_refs(body, arg_name, const_val):
 def _flatten_arg_defaults(procedures, hats):
     """If a procedure parameter always receives the same constant value
     at every call site, inline that constant and eliminate the parameter."""
-    proc_map = {p["name"]: p for p in procedures}
     call_args = defaultdict(list)
 
     def _collect_calls(body):
@@ -2427,7 +2481,7 @@ def parse_project(project_path):
         # after we've scanned ALL targets for cross-sprite sensing_of reads
         # (see Phase 2 and Phase 3 below).  Running them here would prune
         # assignments to variables that are only read by OTHER sprites.
-        lists = {l[0]: list(l[1]) for l in t.get("lists", {}).values()}
+        lists = {li[0]: list(li[1]) for li in t.get("lists", {}).values()}
         costumes = [{
             "name": c.get("name"),
             "md5ext": c.get("md5ext"),
@@ -2721,12 +2775,12 @@ def extract_text(project_path, output_dir):
         vars_block = [f"  {v[0]} = {v[1]!r}"
                       for v in t.get("variables", {}).values()]
         lists_block = []
-        for lid, l in t.get("lists", {}).items():
-            val = l[1]
+        for lid, li in t.get("lists", {}).items():
+            val = li[1]
             if isinstance(val, list) and len(val) > 20:
-                lists_block.append(f"  {l[0]} = <list len={len(val)}, shown below>")
+                lists_block.append(f"  {li[0]} = <list len={len(val)}, shown below>")
             else:
-                lists_block.append(f"  {l[0]} = {val!r}")
+                lists_block.append(f"  {li[0]} = {val!r}")
 
         ex = TextExtractor(t)
         scripts = ex.extract()
@@ -3082,7 +3136,7 @@ class _PyEmitter:
         procedures and hat handlers respectively. register() injects the
         runtime _eng into the submodules so their functions can see it."""
         t = self.t
-        pkg = pyname(t["name"])
+        _ = pyname(t["name"])
         # procs.py and hats.py each need the engine helpers + their own _eng
         sub_header = [
             f"# Auto-generated procedures for Scratch target {t['name']!r}",
@@ -4571,7 +4625,7 @@ def _generate_engine(output_dir, opts=None):
         "        if current_clones >= 300:",
         "            return",
         "        import copy",
-        f"        cname = name + '_[clone_' + str(self._clone_counter) + ']'",
+        "        cname = name + '_[clone_' + str(self._clone_counter) + ']'",
         "        self._clone_counter += 1",
         "        self._clone_count += 1",
         "        clone = copy.copy(orig)",
@@ -8245,7 +8299,9 @@ def _validate_assets(output_dir, ir_data):
 def _validate_runtime(output_dir, ir_data):
     """Headless smoke test: import all modules, register with Engine, run 1 frame."""
     errors = []
-    import sys, importlib, os
+    import sys
+    import importlib
+    import os
     old_cwd = os.getcwd()
     os.chdir(output_dir)
     sys.path.insert(0, ".")
