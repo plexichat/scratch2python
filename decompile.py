@@ -1870,6 +1870,10 @@ def _ir_loop_strength(body):
 # ---- 20. Procedure inlining ---------------------------------------------
 
 
+def _inline_temp_name(uid, arg_name):
+    return f"__inline_{uid}_{arg_name}"
+
+
 def _inline_procedures(procedures, hats):
     """Inline single-use procedures (called once from any hat/procedure)."""
     call_counts = defaultdict(list)
@@ -1902,9 +1906,19 @@ def _inline_procedures(procedures, hats):
                 if name in inline_candidates and name in proc_map:
                     proc = proc_map[name]
                     arg_names = proc.get("args", [])
+                    uid = id(s)
                     subst = {}
+                    pre_stmts = []
                     for an, av in zip(arg_names, call_args):
-                        subst[an] = av
+                        tname = _inline_temp_name(uid, an)
+                        subst[an] = tname
+                        pre_stmts.append(
+                            {
+                                "op": "data_setvariableto",
+                                "args": {"VALUE": av},
+                                "fields": {"VARIABLE": tname},
+                            }
+                        )
                     inlined = []
 
                     def _subst_stmt(ss):
@@ -1927,7 +1941,7 @@ def _inline_procedures(procedures, hats):
                                 node.get("kind") == "arg"
                                 and node.get("name", "") in subst
                             ):
-                                return subst[node["name"]]
+                                return {"kind": "var", "name": subst[node["name"]]}
                             if "args" in node:
                                 if isinstance(node["args"], dict):
                                     node["args"] = {
@@ -1942,6 +1956,7 @@ def _inline_procedures(procedures, hats):
                         return node
 
                     inlined = [_subst_stmt(ps) for ps in proc["body"]]
+                    out.extend(pre_stmts)
                     out.extend(inlined)
                     continue
             if s.get("sub"):
@@ -4973,6 +4988,8 @@ def _generate_engine(output_dir, opts=None):
         "        if proc:",
         "            gen = proc(self, *args)",
         "            if gen is not None and hasattr(gen, '__next__'):",
+        "                if _eng is not None and hasattr(_eng, '_task_sprite'):",
+        "                    _eng._task_sprite[id(gen)] = self.name",
         "                yield from gen",
         "",
         "",
@@ -5136,9 +5153,15 @@ def _generate_engine(output_dir, opts=None):
         "            self.rebuild_broadcast_index()",
         "        targets = self._broadcast_index.get(name, [])",
         "        for sp, h in targets:",
+        "            hat_id = id(h)",
+        "            # Cancel any existing running instance of this hat (Scratch restart behavior)",
+        "            self._tasks = [g for g in self._tasks",
+        "                          if self._task_sprite.get(id(g)) != sp.name or",
+        "                          getattr(g, '_hat_id', None) != hat_id]",
         '            gen = h["body_gen"](sp)',
         "            if gen is None or not hasattr(gen, '__next__'):",
         "                continue",
+        "            gen._hat_id = hat_id",
         "            try:",
         "                next(gen); self._tasks.append(gen)",
         "                self._task_sprite[id(gen)] = sp.name",
@@ -5202,8 +5225,15 @@ def _generate_engine(output_dir, opts=None):
         "        # Yield until all tracked generators complete (removed from _tasks by stop/stop_all)",
         "        while _wait_ids:",
         "            _wait_ids = {gid for gid in _wait_ids if any(id(t) == gid for t in self._tasks)}",
-        "            if _wait_ids:",
+        "        if _wait_ids:",
         "                yield",
+        "",
+        "    def _stop_other_scripts(self, sprite_name: str) -> None:",
+        '        """Stop all scripts for the given sprite except the one calling this."""',
+        "        self._tasks = [g for g in self._tasks if self._task_sprite.get(id(g)) != sprite_name]",
+        "        for tid in list(self._task_sprite.keys()):",
+        "            if self._task_sprite[tid] == sprite_name:",
+        "                self._task_sprite.pop(tid, None)",
         "",
         "    def load_sounds(self, sound_data: Dict[str, List[Dict]]) -> None:",
         "        # Map sound name -> asset path for every target",
@@ -5639,6 +5669,8 @@ def _generate_engine(output_dir, opts=None):
         "        _my = _eng._mouse.get('y', 0)",
         "        if _mx is None or _my is None:",
         "            return False",
+        "        # Apply rotation/transform to match on-screen appearance",
+        "        _img = _transform_costume(_img, sp)",
         "        # Pixel-perfect check against non-transparent pixels",
         "        try:",
         "            import numpy as _np",
@@ -5803,6 +5835,14 @@ def _generate_engine(output_dir, opts=None):
         "    try:",
         "        import numpy as _np",
         "        _stage_img = _disp._last_frame if getattr(_disp, '_last_frame', None) is not None else _np.asarray(_disp.stage)",
+        "        # Composite current pen layer into stage image for current-frame pen detection",
+        "        try:",
+        "            _pen_arr = _np.asarray(_disp.pen_layer)",
+        "            if _pen_arr.shape[:2] == _stage_img.shape[:2]:",
+        "                _pen_alpha = _pen_arr[:, :, 3:4] / 255.0",
+        "                _stage_img = (_stage_img.astype(float) * (1 - _pen_alpha) + _pen_arr[:, :, :3].astype(float) * _pen_alpha).astype(_np.uint8)",
+        "        except Exception:",
+        "            pass",
         "        _arr = _np.asarray(_img)",
         "        _alpha = _arr[:, :, 3] > 0",
         "        if not _alpha.any():",
@@ -5817,7 +5857,8 @@ def _generate_engine(output_dir, opts=None):
         "            _sensing_touchingcolor._cache[_cache_key] = False",
         "            return False",
         "        _samp = _stage_img[_gys, _gxs, :3]",
-        "        _result = bool(_np.logical_and.reduce((_samp[:, 0] == _rt, _samp[:, 1] == _gt, _samp[:, 2] == _bt)).any())",
+        "        # Bitmasked color matching: compare high 5 bits per channel (Scratch VM spec)",
+        "        _result = bool(_np.logical_and.reduce(((_samp[:, 0] >> 3) == (_rt >> 3), (_samp[:, 1] >> 3) == (_gt >> 3), (_samp[:, 2] >> 3) == (_bt >> 3)).any()))",
         "        _sensing_touchingcolor._cache[_cache_key] = _result",
         "        return _result",
         "    except Exception:",
@@ -5854,6 +5895,14 @@ def _generate_engine(output_dir, opts=None):
         "    try:",
         "        import numpy as _np",
         "        _stage_img = _disp._last_frame if getattr(_disp, '_last_frame', None) is not None else _np.asarray(_disp.stage)",
+        "        # Composite current pen layer into stage image for current-frame pen detection",
+        "        try:",
+        "            _pen_arr = _np.asarray(_disp.pen_layer)",
+        "            if _pen_arr.shape[:2] == _stage_img.shape[:2]:",
+        "                _pen_alpha = _pen_arr[:, :, 3:4] / 255.0",
+        "                _stage_img = (_stage_img.astype(float) * (1 - _pen_alpha) + _pen_arr[:, :, :3].astype(float) * _pen_alpha).astype(_np.uint8)",
+        "        except Exception:",
+        "            pass",
         "        _arr = _np.asarray(_img)",
         "        _mask1 = (_arr[:, :, 0] == _r1) & (_arr[:, :, 1] == _g1) & (_arr[:, :, 2] == _b1) & (_arr[:, :, 3] > 0)",
         "        if not _mask1.any():",
@@ -5869,7 +5918,7 @@ def _generate_engine(output_dir, opts=None):
         "        if _pxs.size == 0:",
         "            return False",
         "        _samp = _stage_img[_pys, _pxs, :3]",
-        "        return bool(_np.logical_and.reduce((_samp[:, 0] == _r2, _samp[:, 1] == _g2, _samp[:, 2] == _b2)).any())",
+        "        return bool(_np.logical_and.reduce(((_samp[:, 0] >> 3) == (_r2 >> 3), (_samp[:, 1] >> 3) == (_g2 >> 3), (_samp[:, 2] >> 3) == (_b2 >> 3)).any()))",
         "    except Exception:",
         "        return False",
         "",
@@ -6854,6 +6903,43 @@ def _generate_display(output_dir, opts=None):
         "        self.pen_layer = Image.new('RGBA', (w, h), (0, 0, 0, 0)); self._pen_layer_version += 1",
         "        self._costume_scaled_cache.clear()",
         "",
+        "    def switch_backdrop(self, backdrop: str) -> None:",
+        '        """Switch the stage backdrop by name."""',
+        "        if self.eng is not None:",
+        "            stage = self.eng.stage",
+        "            if stage is not None:",
+        "                stage.set_costume(backdrop)",
+        "                self._backdrop_cache_key = None",
+        "",
+        "    def if_on_edge_bounce(self, sp) -> None:",
+        '        """Bounce the sprite if it\'s touching the stage edge."""',
+        "        _w2 = self.stage_w / 2.0",
+        "        _h2 = self.stage_h / 2.0",
+        "        _md5 = getattr(sp, '_costume_md5', None)",
+        "        if _md5:",
+        "            _img = self.load_costume(_md5, getattr(sp, 'name', None))",
+        "            if _img:",
+        "                _s = max(0.0, sp.size) / 100.0",
+        "                _nw = _img.size[0] * _s / self.scale",
+        "                _nh = _img.size[1] * _s / self.scale",
+        "            else:",
+        "                _nw = _nh = 0",
+        "        else:",
+        "            _nw = _nh = 0",
+        "        _dx = _nw / 2.0",
+        "        _dy = _nh / 2.0",
+        "        _bounce = False",
+        "        if sp.x + _dx > _w2:",
+        "            sp.x = _w2 - _dx; _bounce = True",
+        "        elif sp.x - _dx < -_w2:",
+        "            sp.x = -_w2 + _dx; _bounce = True",
+        "        if sp.y + _dy > _h2:",
+        "            sp.y = _h2 - _dy; _bounce = True",
+        "        elif sp.y - _dy < -_h2:",
+        "            sp.y = -_h2 + _dy; _bounce = True",
+        "        if _bounce:",
+        "            sp.direction = 180 - sp.direction if (sp.x <= -_w2 + _dx or sp.x >= _w2 - _dx) else -sp.direction",
+        "",
         "    def stamp(self, md5ext: str, x: float, y: float, size_pct: float, sprite_name=None, sp=None):",
         "        img = self.load_costume(md5ext, sprite_name)",
         "        if img is None:",
@@ -6889,12 +6975,12 @@ def _generate_display(output_dir, opts=None):
         "                _cx = (_rnw // 2 - int(_rcx))",
         "                _cy = (_rnh // 2 - int(_rcy))",
         "                _canvas.paste(img, (_cx, _cy), img)",
-        "                img = _canvas.rotate(_angle, expand=False, resample=_PIL_ROTRES, center=(_rnw / 2.0, _rnh / 2.0))",
+        "                img = _canvas.rotate(_angle, expand=True, resample=_PIL_ROTRES)",
         "                nw, nh = img.size",
         "                px = int((x + self.stage_w / 2) * sx - nw // 2)",
         "                py = int((self.stage_h / 2 - y) * sy - nh // 2)",
         "            elif rotation_style == 'left-right':",
-        "                if direction > 90 and direction < 270:",
+        "                if 90 < (direction % 360) < 270:",
         "                    img = img.transpose(Image.FLIP_LEFT_RIGHT)",
         "                    _rcx = nw - _rcx",
         "                px = int((x + self.stage_w / 2) * sx - _rcx)",
