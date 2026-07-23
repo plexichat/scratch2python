@@ -173,6 +173,9 @@ def pyname(name):
     s = re.sub(r"[^A-Za-z0-9_]", "_", str(name))
     if not s or s[0].isdigit():
         s = "_" + s
+    import keyword
+    if keyword.iskeyword(s):
+        s = "_" + s
     return s
 
 
@@ -1613,18 +1616,6 @@ def _ir_loop_strength(body):
 
 # ---- 20. Procedure inlining ---------------------------------------------
 
-_inline_uid = [0]
-
-def _inline_temp_name(uid, raw):
-    """Build a valid Python-identifier temp name for an inlined proc arg.
-
-    Scratch parameter names may contain spaces or punctuation (e.g. 'tri 1'),
-    which are illegal in the local-variable identifiers these temps compile to.
-    Both construction sites must agree, so route them through this helper.
-    """
-    safe = re.sub(r"\W", "_", str(raw))
-    return f"_inline_{uid}_{safe}"
-
 def _inline_procedures(procedures, hats):
     """Inline single-use procedures (called once from any hat/procedure)."""
     call_counts = defaultdict(list)
@@ -1658,18 +1649,6 @@ def _inline_procedures(procedures, hats):
                     subst = {}
                     for an, av in zip(arg_names, call_args):
                         subst[an] = av
-                    # Unique id per call site so nested/repeated inlines never
-                    # reuse the same temp name (temps are function-scoped locals).
-                    _inline_uid[0] += 1
-                    uid = _inline_uid[0]
-                    # Insert set variable stmts before inlined body for call-by-value
-                    pre_stmts = []
-                    for an, av in zip(arg_names, call_args):
-                        pre_stmts.append({
-                            "op": "data_setvariableto",
-                            "args": {"VALUE": av},
-                            "fields": {"VARIABLE": _inline_temp_name(uid, an)},
-                        })
                     inlined = []
                     def _subst_stmt(ss):
                         ss = dict(ss)
@@ -1686,10 +1665,7 @@ def _inline_procedures(procedures, hats):
                         if isinstance(node, dict):
                             node = dict(node)
                             if node.get("kind") == "arg" and node.get("name", "") in subst:
-                                # Call-by-value: substitute with a temp variable that was set
-                                # at the call site (not the raw expression, which avoids
-                                # re-evaluation side effects from call-by-name semantics)
-                                return {"kind": "var", "name": _inline_temp_name(uid, node['name'])}
+                                return subst[node['name']]
                             if "args" in node:
                                 if isinstance(node["args"], dict):
                                     node["args"] = {k: _subst_args(v) for k, v in node["args"].items()}
@@ -1699,7 +1675,6 @@ def _inline_procedures(procedures, hats):
                         return node
 
                     inlined = [_subst_stmt(ps) for ps in proc["body"]]
-                    out.extend(pre_stmts)
                     out.extend(inlined)
                     continue
             if s.get("sub"):
@@ -1846,6 +1821,11 @@ def _collect_var_reads(procedures, hats):
                 _scan_expr(v)
             # data_changevariableby reads + writes
             if s["op"] == "data_changevariableby":
+                vname = s.get("fields", {}).get("VARIABLE", "")
+                if vname:
+                    reads.add(vname)
+            # show/hide variable blocks reference variables for on-screen display
+            if s["op"] in ("data_showvariable", "data_hidevariable"):
                 vname = s.get("fields", {}).get("VARIABLE", "")
                 if vname:
                     reads.add(vname)
@@ -3545,7 +3525,7 @@ class _PyEmitter:
             # instead (yield, not pass, preserves frame boundaries in tight
             # loops that contained only these comment calls).
             if name.startswith("//") or "\u200b" in name or name not in self._proc_names:
-                return f"{pad}yield  # no-op: stripped/dead proc {name!r}"
+                return f"{pad}pass  # no-op: stripped/dead proc {name!r}"
             args_list = ", ".join(self._expr(x) for x in a.get("_args", []))
             # Yield from the procedure generator to block the caller until completion
             if args_list:
