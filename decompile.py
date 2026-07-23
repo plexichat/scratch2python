@@ -1894,6 +1894,8 @@ def _inline_procedures(procedures, hats):
     # Build inline map
     proc_map = {p["name"]: p for p in procedures}
 
+    _inline_counter = [0]
+
     def _do_inline(body):
         out = []
         for s in body:
@@ -1906,7 +1908,8 @@ def _inline_procedures(procedures, hats):
                 if name in inline_candidates and name in proc_map:
                     proc = proc_map[name]
                     arg_names = proc.get("args", [])
-                    uid = id(s)
+                    uid = _inline_counter[0]
+                    _inline_counter[0] += 1
                     subst = {}
                     pre_stmts = []
                     for an, av in zip(arg_names, call_args):
@@ -3845,7 +3848,7 @@ class _PyEmitter:
         # inside function-call arguments where #-comments are illegal.
         if op:
             log.warning("unsupported extension reporter: %s", op)
-        return "0.0"
+        return "(0.0)"
 
     # ---- statement emitter -------------------------------------------------
 
@@ -5225,14 +5228,25 @@ def _generate_engine(output_dir, opts=None):
         "        # Yield until all tracked generators complete (removed from _tasks by stop/stop_all)",
         "        while _wait_ids:",
         "            _wait_ids = {gid for gid in _wait_ids if any(id(t) == gid for t in self._tasks)}",
-        "        if _wait_ids:",
+        "            if _wait_ids:",
         "                yield",
         "",
         "    def _stop_other_scripts(self, sprite_name: str) -> None:",
         '        """Stop all scripts for the given sprite except the one calling this."""',
-        "        self._tasks = [g for g in self._tasks if self._task_sprite.get(id(g)) != sprite_name]",
+        "        import inspect",
+        "        _frame = inspect.currentframe()",
+        "        _caller_id = None",
+        "        if _frame is not None and _frame.f_back is not None and _frame.f_back.f_back is not None:",
+        "            _caller_id = id(_frame.f_back.f_back.f_locals.get('g'))",
+        "        self._tasks = [",
+        "            g for g in self._tasks",
+        "            if not (",
+        "                self._task_sprite.get(id(g)) == sprite_name",
+        "                and (_caller_id is None or id(g) != _caller_id)",
+        "            )",
+        "        ]",
         "        for tid in list(self._task_sprite.keys()):",
-        "            if self._task_sprite[tid] == sprite_name:",
+        "            if self._task_sprite[tid] == sprite_name and (_caller_id is None or tid != _caller_id):",
         "                self._task_sprite.pop(tid, None)",
         "",
         "    def load_sounds(self, sound_data: Dict[str, List[Dict]]) -> None:",
@@ -5839,6 +5853,8 @@ def _generate_engine(output_dir, opts=None):
         "        try:",
         "            _pen_arr = _np.asarray(_disp.pen_layer)",
         "            if _pen_arr.shape[:2] == _stage_img.shape[:2]:",
+        "                if _stage_img.ndim == 3 and _stage_img.shape[2] >= 4:",
+        "                    _stage_img = _stage_img[:, :, :3]",
         "                _pen_alpha = _pen_arr[:, :, 3:4] / 255.0",
         "                _stage_img = (_stage_img.astype(float) * (1 - _pen_alpha) + _pen_arr[:, :, :3].astype(float) * _pen_alpha).astype(_np.uint8)",
         "        except Exception:",
@@ -5899,6 +5915,8 @@ def _generate_engine(output_dir, opts=None):
         "        try:",
         "            _pen_arr = _np.asarray(_disp.pen_layer)",
         "            if _pen_arr.shape[:2] == _stage_img.shape[:2]:",
+        "                if _stage_img.ndim == 3 and _stage_img.shape[2] >= 4:",
+        "                    _stage_img = _stage_img[:, :, :3]",
         "                _pen_alpha = _pen_arr[:, :, 3:4] / 255.0",
         "                _stage_img = (_stage_img.astype(float) * (1 - _pen_alpha) + _pen_arr[:, :, :3].astype(float) * _pen_alpha).astype(_np.uint8)",
         "        except Exception:",
@@ -6928,17 +6946,23 @@ def _generate_display(output_dir, opts=None):
         "            _nw = _nh = 0",
         "        _dx = _nw / 2.0",
         "        _dy = _nh / 2.0",
+        "        _bounce_x = False",
+        "        _bounce_y = False",
         "        _bounce = False",
         "        if sp.x + _dx > _w2:",
-        "            sp.x = _w2 - _dx; _bounce = True",
+        "            sp.x = _w2 - _dx; _bounce = True; _bounce_x = True",
         "        elif sp.x - _dx < -_w2:",
-        "            sp.x = -_w2 + _dx; _bounce = True",
+        "            sp.x = -_w2 + _dx; _bounce = True; _bounce_x = True",
         "        if sp.y + _dy > _h2:",
-        "            sp.y = _h2 - _dy; _bounce = True",
+        "            sp.y = _h2 - _dy; _bounce = True; _bounce_y = True",
         "        elif sp.y - _dy < -_h2:",
-        "            sp.y = -_h2 + _dy; _bounce = True",
-        "        if _bounce:",
-        "            sp.direction = 180 - sp.direction if (sp.x <= -_w2 + _dx or sp.x >= _w2 - _dx) else -sp.direction",
+        "            sp.y = -_h2 + _dy; _bounce = True; _bounce_y = True",
+        "        if _bounce_x and _bounce_y:",
+        "            sp.direction = -sp.direction",
+        "        elif _bounce_x:",
+        "            sp.direction = 180 - sp.direction",
+        "        elif _bounce_y:",
+        "            sp.direction = -sp.direction",
         "",
         "    def stamp(self, md5ext: str, x: float, y: float, size_pct: float, sprite_name=None, sp=None):",
         "        img = self.load_costume(md5ext, sprite_name)",
@@ -6975,7 +6999,7 @@ def _generate_display(output_dir, opts=None):
         "                _cx = (_rnw // 2 - int(_rcx))",
         "                _cy = (_rnh // 2 - int(_rcy))",
         "                _canvas.paste(img, (_cx, _cy), img)",
-        "                img = _canvas.rotate(_angle, expand=True, resample=_PIL_ROTRES)",
+        "                img = _canvas.rotate(_angle, expand=False, resample=_PIL_ROTRES)",
         "                nw, nh = img.size",
         "                px = int((x + self.stage_w / 2) * sx - nw // 2)",
         "                py = int((self.stage_h / 2 - y) * sy - nh // 2)",
