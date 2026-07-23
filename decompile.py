@@ -13,6 +13,7 @@ Usage:
   decompile project.json parse -o ir.json
   decompile project.json emit -o decompiled/
 """
+
 import argparse
 import json
 import logging
@@ -31,134 +32,135 @@ log = logging.getLogger("decompile")
 # ---------------------------------------------------------------------------
 
 SUBSTACKS = {
-    "control_if":            ["CONDITION", "SUBSTACK"],
-    "control_if_else":       ["CONDITION", "SUBSTACK", "SUBSTACK2"],
-    "control_repeat":        ["TIMES", "SUBSTACK"],
-    "control_repeat_until":  ["CONDITION", "SUBSTACK"],
-    "control_while":         ["CONDITION", "SUBSTACK"],
-    "control_for_each":      ["VARIABLE", "VALUE", "SUBSTACK"],
-    "control_forever":       ["SUBSTACK"],
+    "control_if": ["CONDITION", "SUBSTACK"],
+    "control_if_else": ["CONDITION", "SUBSTACK", "SUBSTACK2"],
+    "control_repeat": ["TIMES", "SUBSTACK"],
+    "control_repeat_until": ["CONDITION", "SUBSTACK"],
+    "control_while": ["CONDITION", "SUBSTACK"],
+    "control_for_each": ["VARIABLE", "VALUE", "SUBSTACK"],
+    "control_forever": ["SUBSTACK"],
 }
 
 STMT_SIMPLE = {
-    "data_setvariableto":       "set {VARIABLE} to %s",
-    "data_changevariableby":    "change {VARIABLE} by %s",
-    "data_addtolist":           "add %s to {LIST}",
-    "data_deleteoflist":        "delete %s of {LIST}",
-    "data_deletealloflist":     "delete all of {LIST}",
-    "data_replaceitemoflist":   "replace item %s of {LIST} with %s",
-    "data_insertatlist":        "insert %s at %s of {LIST}",
-    "event_broadcast":          "broadcast %s",
-    "event_broadcastandwait":   "broadcast %s and wait",
-    "motion_movesteps":         "move %s steps",
-    "motion_gotoxy":            "go to x:%s y:%s",
-    "motion_goto":              "go to %s",
-    "motion_setx":              "set x to %s",
-    "motion_sety":              "set y to %s",
-    "motion_changexby":         "change x by %s",
-    "motion_changeyby":         "change y by %s",
-    "motion_turnright":         "turn cw %s degrees",
-    "motion_turnleft":          "turn ccw %s degrees",
-    "motion_pointindirection":  "point in direction %s",
-    "motion_pointtowards":      "point towards %s",
-    "motion_setrotationstyle":  "set rotation style %s",
-    "looks_say":                "say %s",
-    "looks_sayforsecs":         "say %s for %s secs",
-    "looks_think":              "think %s",
-    "looks_thinkforsecs":       "think %s for %s secs",
-    "looks_switchcostumeto":    "switch costume to %s",
-    "looks_nextcostume":        "next costume",
-    "looks_switchbackdropto":   "switch backdrop to %s",
-    "looks_nextbackdrop":       "next backdrop",
-    "looks_show":               "show",
-    "looks_hide":               "hide",
-    "looks_setsizeto":          "set size to %s",
-    "looks_changeeffectby":     "change %s effect by %s",
-    "looks_seteffectto":        "set %s effect to %s",
-    "looks_cleareffects":       "clear graphic effects",
-    "looks_gotofrontback":      "go to %s layer",
+    "data_setvariableto": "set {VARIABLE} to %s",
+    "data_changevariableby": "change {VARIABLE} by %s",
+    "data_addtolist": "add %s to {LIST}",
+    "data_deleteoflist": "delete %s of {LIST}",
+    "data_deletealloflist": "delete all of {LIST}",
+    "data_replaceitemoflist": "replace item %s of {LIST} with %s",
+    "data_insertatlist": "insert %s at %s of {LIST}",
+    "event_broadcast": "broadcast %s",
+    "event_broadcastandwait": "broadcast %s and wait",
+    "motion_movesteps": "move %s steps",
+    "motion_gotoxy": "go to x:%s y:%s",
+    "motion_goto": "go to %s",
+    "motion_setx": "set x to %s",
+    "motion_sety": "set y to %s",
+    "motion_changexby": "change x by %s",
+    "motion_changeyby": "change y by %s",
+    "motion_turnright": "turn cw %s degrees",
+    "motion_turnleft": "turn ccw %s degrees",
+    "motion_pointindirection": "point in direction %s",
+    "motion_pointtowards": "point towards %s",
+    "motion_setrotationstyle": "set rotation style %s",
+    "looks_say": "say %s",
+    "looks_sayforsecs": "say %s for %s secs",
+    "looks_think": "think %s",
+    "looks_thinkforsecs": "think %s for %s secs",
+    "looks_switchcostumeto": "switch costume to %s",
+    "looks_nextcostume": "next costume",
+    "looks_switchbackdropto": "switch backdrop to %s",
+    "looks_nextbackdrop": "next backdrop",
+    "looks_show": "show",
+    "looks_hide": "hide",
+    "looks_setsizeto": "set size to %s",
+    "looks_changeeffectby": "change %s effect by %s",
+    "looks_seteffectto": "set %s effect to %s",
+    "looks_cleareffects": "clear graphic effects",
+    "looks_gotofrontback": "go to %s layer",
     "looks_goforwardbackwardlayers": "go %s %s layers",
-    "pen_clear":                "pen clear",
-    "pen_penUp":                "pen up",
-    "pen_penDown":              "pen down",
-    "pen_stamp":                "pen stamp",
-    "pen_setPenColorToColor":   "set pen color to %s",
-    "pen_setPenSizeTo":         "set pen size to %s",
-    "pen_setPenColorParamTo":   "set pen %s to %s",
+    "pen_clear": "pen clear",
+    "pen_penUp": "pen up",
+    "pen_penDown": "pen down",
+    "pen_stamp": "pen stamp",
+    "pen_setPenColorToColor": "set pen color to %s",
+    "pen_setPenSizeTo": "set pen size to %s",
+    "pen_setPenColorParamTo": "set pen %s to %s",
     "pen_changePenColorParamBy": "change pen %s by %s",
-    "pen_setPenColorToNum":     "set pen color to %s",
-    "control_wait":             "wait %s secs",
-    "control_wait_until":       "wait until %s",
-    "control_stop":             "stop %s",
-    "control_start_as_clone":   "(start as clone)",
-    "control_create_clone_of":  "create clone of %s",
+    "pen_setPenColorToNum": "set pen color to %s",
+    "control_wait": "wait %s secs",
+    "control_wait_until": "wait until %s",
+    "control_stop": "stop %s",
+    "control_start_as_clone": "(start as clone)",
+    "control_create_clone_of": "create clone of %s",
     "control_delete_this_clone": "delete this clone",
-    "sound_play":               "play sound %s",
-    "sound_playuntildone":      "play sound %s until done",
-    "sound_stopallsounds":      "stop all sounds",
-    "sound_cleareffects":       "clear sound effects",
-    "sound_setvolumeto":        "set volume to %s",
-    "sound_changevolumeby":     "change volume by %s",
-    "sensing_setdragmode":      "set drag mode %s",
-    "sensing_resettimer":       "reset timer",
+    "sound_play": "play sound %s",
+    "sound_playuntildone": "play sound %s until done",
+    "sound_stopallsounds": "stop all sounds",
+    "sound_cleareffects": "clear sound effects",
+    "sound_setvolumeto": "set volume to %s",
+    "sound_changevolumeby": "change volume by %s",
+    "sensing_setdragmode": "set drag mode %s",
+    "sensing_resettimer": "reset timer",
 }
 
 REPORTER_SIMPLE = {
-    "operator_add":             "(%s + %s)",
-    "operator_subtract":        "(%s - %s)",
-    "operator_multiply":        "(%s * %s)",
-    "operator_divide":          "(%s / %s)",
-    "operator_mod":             "(%s mod %s)",
-    "operator_round":           "round(%s)",
-    "operator_mathop":          "%s(%s)",
-    "operator_join":            "join(%s, %s)",
-    "operator_letter_of":       "letter(%s) of %s",
-    "operator_length":          "length(%s)",
-    "operator_contains":        "contains(%s, %s)",
-    "operator_and":             "(%s and %s)",
-    "operator_or":              "(%s or %s)",
-    "operator_not":             "(not %s)",
-    "operator_eq":              "(%s = %s)",
-    "operator_equals":          "(%s = %s)",
-    "operator_lt":              "(%s < %s)",
-    "operator_gt":              "(%s > %s)",
-    "operator_random":          "random(%s, %s)",
-    "data_itemoflist":          "item(%s) of {LIST}",
-    "data_itemnumoflist":       "item # of %s in {LIST}",
-    "data_lengthoflist":        "length of {LIST}",
-    "data_listcontainsitem":    "list contains %s in {LIST}",
-    "motion_xposition":         "(x position)",
-    "motion_yposition":         "(y position)",
-    "motion_direction":         "(direction)",
-    "sensing_mousex":           "(mouse x)",
-    "sensing_mousey":           "(mouse y)",
-    "sensing_keypressed":       "(key %s pressed?)",
-    "sensing_mousedown":        "(mouse down?)",
-    "sensing_timer":            "(timer)",
-    "sensing_distanceto":       "(distance to %s)",
-    "sensing_touchingcolor":    "(touching color %s)",
+    "operator_add": "(%s + %s)",
+    "operator_subtract": "(%s - %s)",
+    "operator_multiply": "(%s * %s)",
+    "operator_divide": "(%s / %s)",
+    "operator_mod": "(%s mod %s)",
+    "operator_round": "round(%s)",
+    "operator_mathop": "%s(%s)",
+    "operator_join": "join(%s, %s)",
+    "operator_letter_of": "letter(%s) of %s",
+    "operator_length": "length(%s)",
+    "operator_contains": "contains(%s, %s)",
+    "operator_and": "(%s and %s)",
+    "operator_or": "(%s or %s)",
+    "operator_not": "(not %s)",
+    "operator_eq": "(%s = %s)",
+    "operator_equals": "(%s = %s)",
+    "operator_lt": "(%s < %s)",
+    "operator_gt": "(%s > %s)",
+    "operator_random": "random(%s, %s)",
+    "data_itemoflist": "item(%s) of {LIST}",
+    "data_itemnumoflist": "item # of %s in {LIST}",
+    "data_lengthoflist": "length of {LIST}",
+    "data_listcontainsitem": "list contains %s in {LIST}",
+    "motion_xposition": "(x position)",
+    "motion_yposition": "(y position)",
+    "motion_direction": "(direction)",
+    "sensing_mousex": "(mouse x)",
+    "sensing_mousey": "(mouse y)",
+    "sensing_keypressed": "(key %s pressed?)",
+    "sensing_mousedown": "(mouse down?)",
+    "sensing_timer": "(timer)",
+    "sensing_distanceto": "(distance to %s)",
+    "sensing_touchingcolor": "(touching color %s)",
     "sensing_coloristouchingcolor": "(color %s touching %s)",
-    "sensing_current":          "(current %s)",
-    "looks_size":               "(size)",
-    "looks_costumenumbername":  "(costume %s)",
+    "sensing_current": "(current %s)",
+    "looks_size": "(size)",
+    "looks_costumenumbername": "(costume %s)",
     "looks_backdropnumbername": "(backdrop %s)",
-    "sound_volume":             "(volume)",
+    "sound_volume": "(volume)",
 }
 
 EVENT_HATS = {
-    "event_whenflagclicked":           "when green flag clicked",
-    "event_whenbroadcastreceived":     "when I receive %s",
-    "event_whenkeypressed":            "when %s key pressed",
-    "event_whenstageclicked":          "when stage clicked",
-    "event_whenbackdropswitchesto":    "when backdrop switches to %s",
-    "control_start_as_clone":          "when I start as a clone",
-    "event_whenthisspriteclicked":     "when this sprite clicked",
+    "event_whenflagclicked": "when green flag clicked",
+    "event_whenbroadcastreceived": "when I receive %s",
+    "event_whenkeypressed": "when %s key pressed",
+    "event_whenstageclicked": "when stage clicked",
+    "event_whenbackdropswitchesto": "when backdrop switches to %s",
+    "control_start_as_clone": "when I start as a clone",
+    "event_whenthisspriteclicked": "when this sprite clicked",
 }
 
 
 # ---------------------------------------------------------------------------
 # helpers
 # ---------------------------------------------------------------------------
+
 
 def field_name(block, field):
     val = block.get("fields", {}).get(field)
@@ -174,6 +176,7 @@ def pyname(name):
     if not s or s[0].isdigit():
         s = "_" + s
     import keyword
+
     if keyword.iskeyword(s):
         s = "_" + s
     return s
@@ -194,7 +197,7 @@ def _literal(val):
             v = val[1]
             if isinstance(v, str):
                 try:
-                    return int(v) if v.lstrip('-').isdigit() else float(v)
+                    return int(v) if v.lstrip("-").isdigit() else float(v)
                 except (ValueError, TypeError):
                     pass
             return v
@@ -202,7 +205,7 @@ def _literal(val):
             v = val[1]
             if isinstance(v, str):
                 try:
-                    return int(v) if v.lstrip('-').isdigit() else float(v)
+                    return int(v) if v.lstrip("-").isdigit() else float(v)
                 except (ValueError, TypeError):
                     pass
             return v
@@ -211,7 +214,7 @@ def _literal(val):
         return val
     if isinstance(val, str):
         try:
-            return int(val) if val.lstrip('-').isdigit() else float(val)
+            return int(val) if val.lstrip("-").isdigit() else float(val)
         except (ValueError, TypeError):
             pass
     return val
@@ -220,6 +223,7 @@ def _literal(val):
 # ===================================================================
 #  IR PARSER  (project.json → structured IR dict)
 # ===================================================================
+
 
 class IRParser:
     """Parse a Scratch project.json dict into a structured IR."""
@@ -293,7 +297,11 @@ class IRParser:
         if op in ("math_number", "math_whole_number", "math_positive_number"):
             raw = fld.get("NUM", [0])[0]
             try:
-                num = int(raw) if isinstance(raw, str) and raw.lstrip('-').isdigit() else float(raw)
+                num = (
+                    int(raw)
+                    if isinstance(raw, str) and raw.lstrip("-").isdigit()
+                    else float(raw)
+                )
             except (ValueError, TypeError):
                 num = 0.0
             return {"kind": "const", "v": num}
@@ -302,13 +310,20 @@ class IRParser:
         if op == "procedures_call":
             return self.parse_call(b)
         if op == "sensing_keypressed":
-            return {"kind": "expr", "op": "key_pressed", "args": {"KEY": self.parse_value(inp.get("KEY_OPTION"))}}
+            return {
+                "kind": "expr",
+                "op": "key_pressed",
+                "args": {"KEY": self.parse_value(inp.get("KEY_OPTION"))},
+            }
         if op == "sensing_keyoptions":
             return {"kind": "const", "v": fld.get("KEY_OPTION", [""])[0]}
         if op == "sensing_of":
-            return {"kind": "expr", "op": "sensing_of",
-                    "fields": {"PROPERTY": fld.get("PROPERTY", [""])[0]},
-                    "args": {"OBJECT": self.parse_value(inp.get("OBJECT"))}}
+            return {
+                "kind": "expr",
+                "op": "sensing_of",
+                "fields": {"PROPERTY": fld.get("PROPERTY", [""])[0]},
+                "args": {"OBJECT": self.parse_value(inp.get("OBJECT"))},
+            }
         if op == "sensing_of_object_menu":
             return {"kind": "const", "v": fld.get("OBJECT", [""])[0]}
         if op == "sensing_distancetomenu":
@@ -322,9 +337,14 @@ class IRParser:
         if op == "control_create_clone_of_menu":
             return {"kind": "const", "v": fld.get("CLONE_OPTION", [""])[0]}
         if op == "operator_compare":
-            return {"kind": "expr", "op": "=",
-                    "args": [self.parse_value(inp.get("OPERAND1")),
-                             self.parse_value(inp.get("OPERAND2"))]}
+            return {
+                "kind": "expr",
+                "op": "=",
+                "args": [
+                    self.parse_value(inp.get("OPERAND1")),
+                    self.parse_value(inp.get("OPERAND2")),
+                ],
+            }
         args = {k: self.parse_value(v) for k, v in inp.items()}
         fields = {k: (v[0] if isinstance(v, list) else v) for k, v in fld.items()}
         return {"kind": "expr", "op": op, "args": args, "fields": fields}
@@ -353,8 +373,11 @@ class IRParser:
             op = b.get("opcode", "")
             inp = b.get("inputs", {})
             fld = b.get("fields", {})
-            args = {k: self.parse_value(v) for k, v in inp.items()
-                    if k not in ("SUBSTACK", "SUBSTACK2")}
+            args = {
+                k: self.parse_value(v)
+                for k, v in inp.items()
+                if k not in ("SUBSTACK", "SUBSTACK2")
+            }
             fields = {k: (v[0] if isinstance(v, list) else v) for k, v in fld.items()}
 
             node = {"op": op, "args": args, "fields": fields}
@@ -396,11 +419,18 @@ class IRParser:
                 if name.startswith("//") or "\u200b" in name:
                     continue
                 body = self.parse_stmt(b.get("next")) if b.get("next") else []
-                procedures.append({"name": name, "warp": warp, "args": argnames, "body": body})
-            elif op in ("event_whenflagclicked", "event_whenbroadcastreceived",
-                        "event_whenkeypressed", "event_whenstageclicked",
-                        "event_whenbackdropswitchesto", "control_start_as_clone",
-                        "event_whenthisspriteclicked"):
+                procedures.append(
+                    {"name": name, "warp": warp, "args": argnames, "body": body}
+                )
+            elif op in (
+                "event_whenflagclicked",
+                "event_whenbroadcastreceived",
+                "event_whenkeypressed",
+                "event_whenstageclicked",
+                "event_whenbackdropswitchesto",
+                "control_start_as_clone",
+                "event_whenthisspriteclicked",
+            ):
                 event = {"type": op}
                 if op == "event_whenbroadcastreceived":
                     event["broadcast"] = field_name(b, "BROADCAST_OPTION")
@@ -436,42 +466,101 @@ class IRParser:
 #  27. CFG simplification                28. Nested repeat collapse
 # ===================================================================
 
-_FOLDABLE_UNARY = frozenset({
-    "operator_round", "operator_length", "operator_not",
-})
-_FOLDABLE_BINARY = frozenset({
-    "operator_add", "operator_subtract", "operator_multiply",
-    "operator_divide", "operator_mod", "operator_join",
-    "operator_letter_of", "operator_contains",
-    "operator_and", "operator_or",
-    "operator_equals", "operator_eq", "operator_lt", "operator_gt",
-})
-_FOLDABLE_MATH = frozenset({
-    "abs", "floor", "ceiling", "sqrt", "round", "pi", "e",
-})
-_PURE_OPS = frozenset({
-    "operator_add", "operator_subtract", "operator_multiply",
-    "operator_divide", "operator_mod", "operator_round",
-    "operator_length", "operator_not", "operator_join",
-    "operator_letter_of", "operator_contains",
-    "operator_and", "operator_or",
-    "operator_equals", "operator_eq", "operator_lt", "operator_gt",
-    "operator_mathop",
-})
-_NOOP_STMT_OPS = frozenset({
-    "motion_movesteps", "motion_turnright", "motion_turnleft",
-    "motion_changexby", "motion_changeyby", "motion_setx", "motion_sety",
-    "motion_gotoxy", "motion_pointindirection",
-    "motion_goto", "motion_pointtowards", "motion_setrotationstyle",
-    "looks_setsizeto", "looks_switchcostumeto", "looks_nextcostume",
-    "looks_seteffectto", "looks_changeeffectby", "looks_cleareffects",
-    "looks_show", "looks_hide",
-    "data_setvariableto", "data_changevariableby",
-    "data_addtolist", "data_deleteoflist", "data_deletealloflist",
-    "data_replaceitemoflist", "data_insertatlist",
-    "sound_setvolumeto", "sound_changevolumeby", "sound_stopallsounds",
-    "pen_setPenColorToColor", "pen_setPenColorToNum", "pen_setPenSizeTo",
-})
+_FOLDABLE_UNARY = frozenset(
+    {
+        "operator_round",
+        "operator_length",
+        "operator_not",
+    }
+)
+_FOLDABLE_BINARY = frozenset(
+    {
+        "operator_add",
+        "operator_subtract",
+        "operator_multiply",
+        "operator_divide",
+        "operator_mod",
+        "operator_join",
+        "operator_letter_of",
+        "operator_contains",
+        "operator_and",
+        "operator_or",
+        "operator_equals",
+        "operator_eq",
+        "operator_lt",
+        "operator_gt",
+    }
+)
+_FOLDABLE_MATH = frozenset(
+    {
+        "abs",
+        "floor",
+        "ceiling",
+        "sqrt",
+        "round",
+        "pi",
+        "e",
+    }
+)
+_PURE_OPS = frozenset(
+    {
+        "operator_add",
+        "operator_subtract",
+        "operator_multiply",
+        "operator_divide",
+        "operator_mod",
+        "operator_round",
+        "operator_length",
+        "operator_not",
+        "operator_join",
+        "operator_letter_of",
+        "operator_contains",
+        "operator_and",
+        "operator_or",
+        "operator_equals",
+        "operator_eq",
+        "operator_lt",
+        "operator_gt",
+        "operator_mathop",
+    }
+)
+_NOOP_STMT_OPS = frozenset(
+    {
+        "motion_movesteps",
+        "motion_turnright",
+        "motion_turnleft",
+        "motion_changexby",
+        "motion_changeyby",
+        "motion_setx",
+        "motion_sety",
+        "motion_gotoxy",
+        "motion_pointindirection",
+        "motion_goto",
+        "motion_pointtowards",
+        "motion_setrotationstyle",
+        "looks_setsizeto",
+        "looks_switchcostumeto",
+        "looks_nextcostume",
+        "looks_seteffectto",
+        "looks_changeeffectby",
+        "looks_cleareffects",
+        "looks_show",
+        "looks_hide",
+        "data_setvariableto",
+        "data_changevariableby",
+        "data_addtolist",
+        "data_deleteoflist",
+        "data_deletealloflist",
+        "data_replaceitemoflist",
+        "data_insertatlist",
+        "sound_setvolumeto",
+        "sound_changevolumeby",
+        "sound_stopallsounds",
+        "pen_setPenColorToColor",
+        "pen_setPenColorToNum",
+        "pen_setPenSizeTo",
+    }
+)
 
 
 def _opt_num(v):
@@ -510,6 +599,7 @@ def _opt_eq(a, b):
 
 # ---- 1. Constant folding (improved) ------------------------------------
 
+
 def _fold_expr(node):
     if not isinstance(node, dict):
         return node
@@ -530,7 +620,8 @@ def _fold_expr(node):
     def _all_const(d):
         items = d.items() if isinstance(d, dict) else enumerate(d)
         return all(
-            isinstance(v, dict) and v.get("kind") == "const"
+            isinstance(v, dict)
+            and v.get("kind") == "const"
             and not (isinstance(v.get("v"), tuple) and v["v"][0] == "__BROADCAST__")
             for _, v in items
         )
@@ -583,7 +674,11 @@ def _fold_expr(node):
         if op == "operator_gt":
             return {"kind": "const", "v": 1.0 if na > nb else 0.0}
 
-    if op == "operator_mathop" and _all_const(folded_args) and isinstance(folded_args, dict):
+    if (
+        op == "operator_mathop"
+        and _all_const(folded_args)
+        and isinstance(folded_args, dict)
+    ):
         oper = fields.get("OPERATOR", "")
         x = _opt_num(next(iter(folded_args.values()))["v"])
         if oper.lower() in _FOLDABLE_MATH:
@@ -591,8 +686,13 @@ def _fold_expr(node):
                 return {"kind": "const", "v": _math_mod.pi}
             if oper.lower() == "e":
                 return {"kind": "const", "v": _math_mod.e}
-            table = {"abs": abs, "floor": _math_mod.floor, "ceiling": _math_mod.ceil,
-                     "sqrt": _math_mod.sqrt, "round": round}
+            table = {
+                "abs": abs,
+                "floor": _math_mod.floor,
+                "ceiling": _math_mod.ceil,
+                "sqrt": _math_mod.sqrt,
+                "round": round,
+            }
             if oper.lower() in table:
                 return {"kind": "const", "v": table[oper.lower()](x)}
 
@@ -620,6 +720,7 @@ def _fold_body(body):
 
 # ---- 8. Constant propagation ---------------------------------------------
 
+
 def _ir_const_prop_expr(node, knowns):
     if not isinstance(node, dict):
         return node
@@ -632,7 +733,9 @@ def _ir_const_prop_expr(node, knowns):
     if kind == "expr":
         node = dict(node)
         if isinstance(node.get("args"), dict):
-            node["args"] = {k: _ir_const_prop_expr(v, knowns) for k, v in node["args"].items()}
+            node["args"] = {
+                k: _ir_const_prop_expr(v, knowns) for k, v in node["args"].items()
+            }
         elif isinstance(node.get("args"), list):
             node["args"] = [_ir_const_prop_expr(v, knowns) for v in node["args"]]
         return node
@@ -663,9 +766,12 @@ def _expr_contains_call(node):
 # Statement ops that are "straight-line" and safe for const propagation. Any
 # op not in this set (control flow, calls, broadcasts, waits, stops, clones,
 # custom blocks, etc.) forces us to conservatively drop all known constants.
-_CONST_PROP_SAFE_OPS = frozenset({
-    "data_setvariableto", "data_changevariableby",
-})
+_CONST_PROP_SAFE_OPS = frozenset(
+    {
+        "data_setvariableto",
+        "data_changevariableby",
+    }
+)
 
 
 def _ir_const_prop(body, knowns=None):
@@ -701,18 +807,26 @@ def _ir_const_prop(body, knowns=None):
             # Unknown/unsafe statement: substitute reads first (safe), then
             # drop all knowns because control may leave straight-line flow.
             s = dict(s)
-            s["args"] = {k: _ir_const_prop_expr(v, knowns) for k, v in s.get("args", {}).items()}
+            s["args"] = {
+                k: _ir_const_prop_expr(v, knowns) for k, v in s.get("args", {}).items()
+            }
             out.append(s)
             knowns = {}
             continue
 
         s = dict(s)
-        new_args = {k: _ir_const_prop_expr(v, knowns) for k, v in s.get("args", {}).items()}
+        new_args = {
+            k: _ir_const_prop_expr(v, knowns) for k, v in s.get("args", {}).items()
+        }
         s["args"] = new_args
         var = s.get("fields", {}).get("VARIABLE", "")
         if op == "data_setvariableto":
             val = new_args.get("VALUE")
-            if isinstance(val, dict) and val.get("kind") == "const" and not _expr_contains_call(val):
+            if (
+                isinstance(val, dict)
+                and val.get("kind") == "const"
+                and not _expr_contains_call(val)
+            ):
                 knowns[var] = dict(val)
             else:
                 knowns.pop(var, None)
@@ -723,6 +837,7 @@ def _ir_const_prop(body, knowns=None):
 
 
 # ---- 2–6. Expression simplification (algebraic, boolean, strength, commutativity, canonicalisation) ----
+
 
 def _ir_simplify_expr(node):
     """Algebraic/boolean/strength reduction + canonicalisation."""
@@ -741,13 +856,22 @@ def _ir_simplify_expr(node):
         if values:
             return v.get("v") in values
         return True
-    def _f0(v): return v in (0, 0.0)
-    def _f1(v): return v in (1, 1.0)
+
+    def _f0(v):
+        return v in (0, 0.0)
+
+    def _f1(v):
+        return v in (1, 1.0)
 
     # ---- 5. Comparison canonicalisation: normalise constants to RHS ----
-    if op in ("operator_add", "operator_multiply",
-              "operator_equals", "operator_eq",
-              "operator_and", "operator_or") and isinstance(args, dict):
+    if op in (
+        "operator_add",
+        "operator_multiply",
+        "operator_equals",
+        "operator_eq",
+        "operator_and",
+        "operator_or",
+    ) and isinstance(args, dict):
         items = list(args.items())
         if len(items) == 2:
             k0, v0 = items[0]
@@ -756,7 +880,11 @@ def _ir_simplify_expr(node):
             c1 = _is_const(v1)
             if c0 and not c1:
                 args = {k1: v1, k0: v0}
-            elif op in ("operator_add", "operator_multiply") and isinstance(v0, dict) and isinstance(v1, dict):
+            elif (
+                op in ("operator_add", "operator_multiply")
+                and isinstance(v0, dict)
+                and isinstance(v1, dict)
+            ):
                 # Non-const left, const right already → keep; also sort arg keys for determinism
                 if v0.get("kind") == "expr" and v1.get("kind") == "expr":
                     h0 = hash(str(v0)) if v0.get("kind") == "expr" else 0
@@ -779,7 +907,12 @@ def _ir_simplify_expr(node):
                 op = "operator_lt" if op == "operator_gt" else "operator_gt"
 
     # ---- 6. Flatten nested associative ops ----
-    if op in ("operator_add", "operator_multiply", "operator_and", "operator_or") and isinstance(args, dict):
+    if op in (
+        "operator_add",
+        "operator_multiply",
+        "operator_and",
+        "operator_or",
+    ) and isinstance(args, dict):
         flat = []
         for v in args.values():
             if isinstance(v, dict) and v.get("kind") == "expr" and v.get("op") == op:
@@ -803,8 +936,12 @@ def _ir_simplify_expr(node):
         # x + x → 2*x
         if len(vals) == 2 and not _is_const(vals[0]) and not _is_const(vals[1]):
             if str(vals[0]) == str(vals[1]):
-                return {"kind": "expr", "op": "operator_multiply",
-                        "args": {"0": vals[0], "1": {"kind": "const", "v": 2.0}}, "fields": {}}
+                return {
+                    "kind": "expr",
+                    "op": "operator_multiply",
+                    "args": {"0": vals[0], "1": {"kind": "const", "v": 2.0}},
+                    "fields": {},
+                }
 
     if op == "operator_subtract" and isinstance(args, dict):
         vals = list(args.values())
@@ -812,8 +949,12 @@ def _ir_simplify_expr(node):
             if _is_const(vals[1]) and _f0(vals[1].get("v")):
                 return vals[0]
             if _is_const(vals[0]) and _f0(vals[0].get("v")):
-                return {"kind": "expr", "op": "operator_multiply",
-                        "args": {"0": vals[1], "1": {"kind": "const", "v": -1.0}}, "fields": {}}
+                return {
+                    "kind": "expr",
+                    "op": "operator_multiply",
+                    "args": {"0": vals[1], "1": {"kind": "const", "v": -1.0}},
+                    "fields": {},
+                }
             # x - x → 0
             if str(vals[0]) == str(vals[1]):
                 return {"kind": "const", "v": 0.0}
@@ -838,8 +979,12 @@ def _ir_simplify_expr(node):
                 cv = vals[c_idx].get("v")
                 nc = vals[1 - c_idx]
                 if cv == 2.0:
-                    return {"kind": "expr", "op": "operator_add",
-                            "args": {"0": nc, "1": dict(nc)}, "fields": {}}
+                    return {
+                        "kind": "expr",
+                        "op": "operator_add",
+                        "args": {"0": nc, "1": dict(nc)},
+                        "fields": {},
+                    }
 
     if op == "operator_divide" and isinstance(args, dict):
         vals = list(args.values())
@@ -938,6 +1083,7 @@ def _cse_safe_prefix(var_names):
             return prefix
         base = base + "_"
 
+
 def _hash_expr(node):
     """Deterministic hash for an expression tree (used for CSE)."""
     if isinstance(node, dict):
@@ -1001,6 +1147,7 @@ def _ir_cse_block(body, var_base=None):
     """
     # Pass 1: count occurrences of every pure subexpr
     expr_count = defaultdict(int)
+
     def _count_exprs(node):
         if isinstance(node, dict):
             k = node.get("kind")
@@ -1014,6 +1161,7 @@ def _ir_cse_block(body, var_base=None):
             elif isinstance(a, list):
                 for val in a:
                     _count_exprs(val)
+
     for s in body:
         for v in s.get("args", {}).values():
             _count_exprs(v)
@@ -1035,6 +1183,7 @@ def _ir_cse_block(body, var_base=None):
 
     # Map hash → set of variable names read by that subexpr (for invalidation)
     hoist_vars = {}
+
     def _collect_hoist_vars(node):
         stack = [node]
         while stack:
@@ -1051,6 +1200,7 @@ def _ir_cse_block(body, var_base=None):
                     stack.extend(a)
             elif isinstance(n, list):
                 stack.extend(n)
+
     for s in body:
         for v in s.get("args", {}).values():
             _collect_hoist_vars(v)
@@ -1065,7 +1215,9 @@ def _ir_cse_block(body, var_base=None):
                 node = dict(node)
                 inner_args = node.get("args", {})
                 if isinstance(inner_args, dict):
-                    node["args"] = {k: _cse_in_expr(v, invalid) for k, v in inner_args.items()}
+                    node["args"] = {
+                        k: _cse_in_expr(v, invalid) for k, v in inner_args.items()
+                    }
                 elif isinstance(inner_args, list):
                     node["args"] = [_cse_in_expr(v, invalid) for v in inner_args]
                 h = _hash_expr(node)
@@ -1092,6 +1244,7 @@ def _ir_cse_block(body, var_base=None):
 
         # Step 1: find first uses of hoisted subexprs (before replacement)
         first_uses = []
+
         def _find_first_uses(node):
             if isinstance(node, dict):
                 k = node.get("kind")
@@ -1109,6 +1262,7 @@ def _ir_cse_block(body, var_base=None):
                     if h in hoist_set and h not in global_visited:
                         global_visited.add(h)
                         first_uses.append((h, node))
+
         a_vals = s.get("args", {})
         if isinstance(a_vals, dict):
             for v in a_vals.values():
@@ -1121,14 +1275,18 @@ def _ir_cse_block(body, var_base=None):
         pre = []
         for h, expr_node in first_uses:
             vn = f"{var_base}{hoist_counter[h]}"
-            pre.append({
-                "op": "data_setvariableto",
-                "args": {"VALUE": expr_node},
-                "fields": {"VARIABLE": vn},
-            })
+            pre.append(
+                {
+                    "op": "data_setvariableto",
+                    "args": {"VALUE": expr_node},
+                    "fields": {"VARIABLE": vn},
+                }
+            )
 
         # Step 3: Now replace all occurrences with var references
-        s["args"] = {k: _cse_in_expr(v, invalidated) for k, v in s.get("args", {}).items()}
+        s["args"] = {
+            k: _cse_in_expr(v, invalidated) for k, v in s.get("args", {}).items()
+        }
         if s.get("sub"):
             s["sub"], c = _ir_cse_block(s["sub"], var_base)
             next_ctr[0] = max(next_ctr[0], c)
@@ -1144,15 +1302,28 @@ def _ir_cse_block(body, var_base=None):
 
 # ---- 9. Dead expression elimination (drop pure stmts that are no-ops) ----
 
-_PURE_EMIT_EMPTY = frozenset({
-    "operator_add", "operator_subtract", "operator_multiply",
-    "operator_divide", "operator_mod", "operator_round",
-    "operator_length", "operator_not", "operator_join",
-    "operator_letter_of", "operator_contains",
-    "operator_and", "operator_or",
-    "operator_equals", "operator_eq", "operator_lt", "operator_gt",
-    "operator_mathop",
-})
+_PURE_EMIT_EMPTY = frozenset(
+    {
+        "operator_add",
+        "operator_subtract",
+        "operator_multiply",
+        "operator_divide",
+        "operator_mod",
+        "operator_round",
+        "operator_length",
+        "operator_not",
+        "operator_join",
+        "operator_letter_of",
+        "operator_contains",
+        "operator_and",
+        "operator_or",
+        "operator_equals",
+        "operator_eq",
+        "operator_lt",
+        "operator_gt",
+        "operator_mathop",
+    }
+)
 
 
 def _is_pure_stmt(op):
@@ -1161,6 +1332,7 @@ def _is_pure_stmt(op):
 
 
 # ---- 10. No-op statement removal -----------------------------------------
+
 
 def _is_noop_stmt(s):
     """Check if a statement is effectively a no-op."""
@@ -1202,7 +1374,12 @@ def _is_noop_stmt(s):
     if op == "motion_gotoxy":
         xv = args.get("X", {})
         yv = args.get("Y", {})
-        if isinstance(xv, dict) and xv.get("kind") == "var" and isinstance(yv, dict) and yv.get("kind") == "var":
+        if (
+            isinstance(xv, dict)
+            and xv.get("kind") == "var"
+            and isinstance(yv, dict)
+            and yv.get("kind") == "var"
+        ):
             if xv.get("name") == "x position" and yv.get("name") == "y position":
                 return True
     if op == "looks_switchcostumeto":
@@ -1222,14 +1399,21 @@ def _is_noop_stmt(s):
 
 # ---- 11. Empty-block elimination / 19. Empty-loop deletion -------------
 
+
 def _is_empty_block(blk):
     """True if block contains only 'invisible' statements (no side effects)."""
     if not blk:
         return True
     # Ops that produce observable side effects (anything not pure data-flow)
     _SIDE_EFFECT_PREFIXES = (
-        "motion_", "looks_", "sound_", "pen_", "sensing_",
-        "event_", "control_create_clone_of", "control_delete_this_clone",
+        "motion_",
+        "looks_",
+        "sound_",
+        "pen_",
+        "sensing_",
+        "event_",
+        "control_create_clone_of",
+        "control_delete_this_clone",
         "control_stop",
     )
     for s in blk:
@@ -1240,15 +1424,22 @@ def _is_empty_block(blk):
             return False
         if any(op.startswith(p) for p in _SIDE_EFFECT_PREFIXES):
             return False
-        if op in ("data_setvariableto", "data_changevariableby",
-                  "data_addtolist", "data_deleteoflist", "data_deletealloflist",
-                  "data_replaceitemoflist", "data_insertatlist",
-                  "procedures_call"):
+        if op in (
+            "data_setvariableto",
+            "data_changevariableby",
+            "data_addtolist",
+            "data_deleteoflist",
+            "data_deletealloflist",
+            "data_replaceitemoflist",
+            "data_insertatlist",
+            "procedures_call",
+        ):
             return False
     return True
 
 
 # ---- 13. Redundant broadcast collapse / 14. Duplicate stmt collapse -----
+
 
 def _collapse_duplicates(body):
     """Collapse consecutive duplicate statements and broadcast merges."""
@@ -1297,8 +1488,9 @@ def _collapse_duplicates(body):
                 if str(lop_args.get("SIZE")) == str(sop_args.get("SIZE")):
                     continue
             if lop == "looks_seteffectto" and sop == "looks_seteffectto":
-                if lop_fields.get("EFFECT") == sop_fields.get("EFFECT") and \
-                   str(lop_args.get("VALUE")) == str(sop_args.get("VALUE")):
+                if lop_fields.get("EFFECT") == sop_fields.get("EFFECT") and str(
+                    lop_args.get("VALUE")
+                ) == str(sop_args.get("VALUE")):
                     continue
             if lop == "sound_setvolumeto" and sop == "sound_setvolumeto":
                 if str(lop_args.get("VOLUME")) == str(sop_args.get("VOLUME")):
@@ -1311,8 +1503,9 @@ def _collapse_duplicates(body):
                 if str(lop_args.get("Y")) == str(sop_args.get("Y")):
                     continue
             if lop == "motion_gotoxy" and sop == "motion_gotoxy":
-                if str(lop_args.get("X")) == str(sop_args.get("X")) and \
-                   str(lop_args.get("Y")) == str(sop_args.get("Y")):
+                if str(lop_args.get("X")) == str(sop_args.get("X")) and str(
+                    lop_args.get("Y")
+                ) == str(sop_args.get("Y")):
                     continue
             # 14. Consecutive identical switch costume / backdrop
             if lop == "looks_switchcostumeto" and sop == "looks_switchcostumeto":
@@ -1337,8 +1530,9 @@ def _collapse_duplicates(body):
                     continue
             # 14. Consecutive identical pen color param / numeric pen color
             if lop == "pen_setPenColorParamTo" and sop == "pen_setPenColorParamTo":
-                if lop_fields.get("colorParam") == sop_fields.get("colorParam") and \
-                   str(lop_args.get("VALUE")) == str(sop_args.get("VALUE")):
+                if lop_fields.get("colorParam") == sop_fields.get("colorParam") and str(
+                    lop_args.get("VALUE")
+                ) == str(sop_args.get("VALUE")):
                     continue
             if lop == "pen_setPenColorToNum" and sop == "pen_setPenColorToNum":
                 if str(lop_args.get("COLOR")) == str(sop_args.get("COLOR")):
@@ -1357,9 +1551,11 @@ def _collapse_duplicates(body):
 
 # ---- 16. Loop-invariant code motion (LICM) -------------------------------
 
+
 def _licm_write_set(body):
     """Return set of variable names written (data_setvariableto / data_changevariableby) in body."""
     writes = set()
+
     # Check if body contains any procedure call or broadcast - if so, be conservative
     def _has_side_effect(body):
         for s in body:
@@ -1371,6 +1567,7 @@ def _licm_write_set(body):
             if s.get("sub2") and _has_side_effect(s["sub2"]):
                 return True
         return False
+
     if _has_side_effect(body):
         # Can't determine which vars are written - return a sentinel to indicate all dirty
         return {"__ALL_DIRTY__"}
@@ -1399,10 +1596,14 @@ def _licm_write_set(body):
     return writes
 
 
-_LOOP_HOISTABLE_OPS = _PURE_OPS | frozenset({
-    "data_itemoflist", "data_lengthoflist", "data_listcontainsitem",
-    "data_itemnumoflist",
-})
+_LOOP_HOISTABLE_OPS = _PURE_OPS | frozenset(
+    {
+        "data_itemoflist",
+        "data_lengthoflist",
+        "data_listcontainsitem",
+        "data_itemnumoflist",
+    }
+)
 
 
 def _expr_cost(node):
@@ -1458,8 +1659,13 @@ def _licm_body(body, loop_depth=0, cse_prefix=None):
     out = []
     for s in body:
         s = dict(s)
-        if s.get("sub") and s["op"] in ("control_repeat", "control_repeat_until",
-                                         "control_while", "control_forever", "control_for_each"):
+        if s.get("sub") and s["op"] in (
+            "control_repeat",
+            "control_repeat_until",
+            "control_while",
+            "control_forever",
+            "control_for_each",
+        ):
             hoisted = []
             all_body_writes = _licm_write_set(s["sub"])
             if "__ALL_DIRTY__" in all_body_writes:
@@ -1474,26 +1680,39 @@ def _licm_body(body, loop_depth=0, cse_prefix=None):
                     target_var = f.get("VARIABLE", "")
                     val = ss.get("args", {}).get("VALUE", {})
                     if target_var and target_var not in all_body_writes:
-                        if isinstance(val, dict) and val.get("kind") in ("const", "var"):
+                        if isinstance(val, dict) and val.get("kind") in (
+                            "const",
+                            "var",
+                        ):
                             hoisted.append(ss)
                             continue
-                        if isinstance(val, dict) and val.get("kind") == "expr" \
-                                and val.get("op", "") in _LOOP_HOISTABLE_OPS:
+                        if (
+                            isinstance(val, dict)
+                            and val.get("kind") == "expr"
+                            and val.get("op", "") in _LOOP_HOISTABLE_OPS
+                        ):
                             if _is_loop_invariant(val, all_body_writes):
                                 hoisted.append(ss)
                                 continue
                 new_sub.append(ss)
             licm_counter = [0]
             licm_seen = {}
+
             def _collect_invariant_subs(node):
                 if not isinstance(node, dict):
                     return
                 kind = node.get("kind")
                 if kind == "expr" and node.get("op", "") in _LOOP_HOISTABLE_OPS:
-                    if _is_loop_invariant(node, all_body_writes) and _expr_cost(node) > 1:
+                    if (
+                        _is_loop_invariant(node, all_body_writes)
+                        and _expr_cost(node) > 1
+                    ):
                         h = _hash_expr(node)
                         if h not in licm_seen:
-                            licm_seen[h] = (f"{cse_prefix}l{licm_counter[0]}", dict(node))
+                            licm_seen[h] = (
+                                f"{cse_prefix}l{licm_counter[0]}",
+                                dict(node),
+                            )
                             licm_counter[0] += 1
                 if kind == "expr":
                     for a in (node.get("args") or {}).values():
@@ -1501,15 +1720,20 @@ def _licm_body(body, loop_depth=0, cse_prefix=None):
                 elif kind == "call":
                     for a in node.get("args", []):
                         _collect_invariant_subs(a)
+
             for ss in new_sub:
                 for v in ss.get("args", {}).values():
                     _collect_invariant_subs(v)
+
             def _replace_invariant(node):
                 if not isinstance(node, dict):
                     return node
                 kind = node.get("kind")
                 if kind == "expr" and node.get("op", "") in _LOOP_HOISTABLE_OPS:
-                    if _is_loop_invariant(node, all_body_writes) and _expr_cost(node) > 1:
+                    if (
+                        _is_loop_invariant(node, all_body_writes)
+                        and _expr_cost(node) > 1
+                    ):
                         h = _hash_expr(node)
                         if h in licm_seen:
                             return {"kind": "var", "name": licm_seen[h][0]}
@@ -1517,7 +1741,9 @@ def _licm_body(body, loop_depth=0, cse_prefix=None):
                     args = node.get("args", {})
                     if isinstance(args, dict):
                         node = dict(node)
-                        node["args"] = {k: _replace_invariant(v) for k, v in args.items()}
+                        node["args"] = {
+                            k: _replace_invariant(v) for k, v in args.items()
+                        }
                     elif isinstance(args, list):
                         node = dict(node)
                         node["args"] = [_replace_invariant(v) for v in args]
@@ -1525,16 +1751,21 @@ def _licm_body(body, loop_depth=0, cse_prefix=None):
                     node = dict(node)
                     node["args"] = [_replace_invariant(a) for a in node.get("args", [])]
                 return node
+
             for i, ss in enumerate(new_sub):
                 ss = dict(ss)
-                ss["args"] = {k: _replace_invariant(v) for k, v in ss.get("args", {}).items()}
+                ss["args"] = {
+                    k: _replace_invariant(v) for k, v in ss.get("args", {}).items()
+                }
                 new_sub[i] = ss
             for h, (var_name, orig_node) in licm_seen.items():
-                hoisted.append({
-                    "op": "data_setvariableto",
-                    "args": {"VALUE": orig_node},
-                    "fields": {"VARIABLE": var_name},
-                })
+                hoisted.append(
+                    {
+                        "op": "data_setvariableto",
+                        "args": {"VALUE": orig_node},
+                        "fields": {"VARIABLE": var_name},
+                    }
+                )
             s["sub"] = _licm_body(new_sub, loop_depth + 1, cse_prefix)
             if hoisted and not s["sub"]:
                 s["sub"] = [hoisted.pop()]
@@ -1551,19 +1782,39 @@ def _licm_body(body, loop_depth=0, cse_prefix=None):
 
 # ---- 17. Loop strength reduction ---------------------------------------
 
-_YIELD_INDUCING_OPS = frozenset({
-    "control_wait", "control_wait_until",
-    "motion_movesteps", "motion_gotoxy", "motion_goto",
-    "motion_setx", "motion_sety", "motion_changexby", "motion_changeyby",
-    "motion_turnright", "motion_turnleft", "motion_pointindirection",
-    "motion_pointtowards", "motion_setrotationstyle",
-    "motion_glideto", "motion_glidesecstoxy",
-    "looks_switchcostumeto", "looks_nextcostume", "looks_switchbackdropto",
-    "looks_nextbackdrop", "looks_sayforsecs", "looks_thinkforsecs",
-    "sound_play", "sound_playuntildone",
-    "sensing_askandwait", "sensing_touchingcolor", "sensing_coloristouchingcolor",
-    "sensing_touchingobject", "sensing_loudness",
-})
+_YIELD_INDUCING_OPS = frozenset(
+    {
+        "control_wait",
+        "control_wait_until",
+        "motion_movesteps",
+        "motion_gotoxy",
+        "motion_goto",
+        "motion_setx",
+        "motion_sety",
+        "motion_changexby",
+        "motion_changeyby",
+        "motion_turnright",
+        "motion_turnleft",
+        "motion_pointindirection",
+        "motion_pointtowards",
+        "motion_setrotationstyle",
+        "motion_glideto",
+        "motion_glidesecstoxy",
+        "looks_switchcostumeto",
+        "looks_nextcostume",
+        "looks_switchbackdropto",
+        "looks_nextbackdrop",
+        "looks_sayforsecs",
+        "looks_thinkforsecs",
+        "sound_play",
+        "sound_playuntildone",
+        "sensing_askandwait",
+        "sensing_touchingcolor",
+        "sensing_coloristouchingcolor",
+        "sensing_touchingobject",
+        "sensing_loudness",
+    }
+)
 
 
 def _ir_loop_strength(body):
@@ -1595,6 +1846,7 @@ def _ir_loop_strength(body):
                     continue
                 sub = s.get("sub", [])
                 if tv <= 3 and len(sub) <= 10:
+
                     def _has_yield(block):
                         for stmt in block:
                             if stmt.get("op") in _YIELD_INDUCING_OPS:
@@ -1604,6 +1856,7 @@ def _ir_loop_strength(body):
                             if stmt.get("sub2") and _has_yield(stmt.get("sub2", [])):
                                 return True
                         return False
+
                     if not _has_yield(sub):
                         unrolled = []
                         for _ in range(tv):
@@ -1615,6 +1868,7 @@ def _ir_loop_strength(body):
 
 
 # ---- 20. Procedure inlining ---------------------------------------------
+
 
 def _inline_procedures(procedures, hats):
     """Inline single-use procedures (called once from any hat/procedure)."""
@@ -1641,7 +1895,9 @@ def _inline_procedures(procedures, hats):
         for s in body:
             s = dict(s)
             if s["op"] == "procedures_call":
-                name = s.get("fields", {}).get("PROCCODE", s.get("args", {}).get("PROCCODE", ""))
+                name = s.get("fields", {}).get(
+                    "PROCCODE", s.get("args", {}).get("PROCCODE", "")
+                )
                 call_args = s.get("args", {}).get("_args", [])
                 if name in inline_candidates and name in proc_map:
                     proc = proc_map[name]
@@ -1650,9 +1906,12 @@ def _inline_procedures(procedures, hats):
                     for an, av in zip(arg_names, call_args):
                         subst[an] = av
                     inlined = []
+
                     def _subst_stmt(ss):
                         ss = dict(ss)
-                        ss["args"] = {k: _subst_args(v) for k, v in ss.get("args", {}).items()}
+                        ss["args"] = {
+                            k: _subst_args(v) for k, v in ss.get("args", {}).items()
+                        }
                         if ss.get("sub"):
                             ss["sub"] = [_subst_stmt(s) for s in ss["sub"]]
                         if ss.get("sub2"):
@@ -1664,13 +1923,21 @@ def _inline_procedures(procedures, hats):
                             return [_subst_args(v) for v in node]
                         if isinstance(node, dict):
                             node = dict(node)
-                            if node.get("kind") == "arg" and node.get("name", "") in subst:
-                                return subst[node['name']]
+                            if (
+                                node.get("kind") == "arg"
+                                and node.get("name", "") in subst
+                            ):
+                                return subst[node["name"]]
                             if "args" in node:
                                 if isinstance(node["args"], dict):
-                                    node["args"] = {k: _subst_args(v) for k, v in node["args"].items()}
+                                    node["args"] = {
+                                        k: _subst_args(v)
+                                        for k, v in node["args"].items()
+                                    }
                                 elif isinstance(node["args"], list):
-                                    node["args"] = [_subst_args(v) for v in node["args"]]
+                                    node["args"] = [
+                                        _subst_args(v) for v in node["args"]
+                                    ]
                             return node
                         return node
 
@@ -1695,7 +1962,9 @@ def _inline_procedures(procedures, hats):
 def _count_calls(body, owning_proc, call_counts):
     for s in body:
         if s["op"] == "procedures_call":
-            name = s.get("fields", {}).get("PROCCODE", s.get("args", {}).get("PROCCODE", ""))
+            name = s.get("fields", {}).get(
+                "PROCCODE", s.get("args", {}).get("PROCCODE", "")
+            )
             if name != owning_proc:
                 call_counts[name].append(s)
         if s.get("sub"):
@@ -1706,17 +1975,24 @@ def _count_calls(body, owning_proc, call_counts):
 
 # ---- 21. Dead procedure elimination ------------------------------------
 
+
 def _elim_dead_procedures(procedures, hats):
     """Remove procedure definitions never called from any hat or live procedure."""
     live = set()
+
     def _find_live_calls(body):
         for s in body:
             if s["op"] == "procedures_call":
-                live.add(s.get("fields", {}).get("PROCCODE", s.get("args", {}).get("PROCCODE", "")))
+                live.add(
+                    s.get("fields", {}).get(
+                        "PROCCODE", s.get("args", {}).get("PROCCODE", "")
+                    )
+                )
             if s.get("sub"):
                 _find_live_calls(s["sub"])
             if s.get("sub2"):
                 _find_live_calls(s["sub2"])
+
     for h in hats:
         _find_live_calls(h["body"])
     # Iteratively find live procedures (called by other live procedures)
@@ -1736,11 +2012,23 @@ def _elim_dead_procedures(procedures, hats):
 # ---- 24. Unused variable/list elimination --------------------------------
 
 # Built-in sensing_of properties that are NOT custom variables (cross-sprite reads)
-_SENSING_BUILTINS = frozenset({
-    "x position", "y position", "direction", "size", "volume",
-    "costume number", "costume name", "costume_number", "costume_name",
-    "backdrop number", "backdrop name", "backdrop_number", "backdrop_name",
-})
+_SENSING_BUILTINS = frozenset(
+    {
+        "x position",
+        "y position",
+        "direction",
+        "size",
+        "volume",
+        "costume number",
+        "costume name",
+        "costume_number",
+        "costume_name",
+        "backdrop number",
+        "backdrop name",
+        "backdrop_number",
+        "backdrop_name",
+    }
+)
 _SENSING_BUILTINS_LOWER = frozenset(p.lower() for p in _SENSING_BUILTINS)
 
 
@@ -1751,6 +2039,7 @@ def _collect_external_sensing_reads(all_targets):
     This prevents _elim_unused_vars from pruning variables that are only
     referenced via cross-sprite [variable of Sprite] sensing blocks."""
     external = defaultdict(set)
+
     def _scan_expr(node, owning_target_name):
         if isinstance(node, dict):
             if node.get("kind") == "expr" and node.get("op") == "sensing_of":
@@ -1772,7 +2061,11 @@ def _collect_external_sensing_reads(all_targets):
                         if prop:
                             for t in all_targets:
                                 external[t.get("name", "")].add(prop)
-            for v in node.get("args", {}).values() if isinstance(node.get("args"), dict) else ():
+            for v in (
+                node.get("args", {}).values()
+                if isinstance(node.get("args"), dict)
+                else ()
+            ):
                 _scan_expr(v, owning_target_name)
             if isinstance(node.get("args"), list):
                 for v in node["args"]:
@@ -1780,6 +2073,7 @@ def _collect_external_sensing_reads(all_targets):
         elif isinstance(node, list):
             for v in node:
                 _scan_expr(v, owning_target_name)
+
     def _scan_body(body, target_name):
         for s in body:
             for v in s.get("args", {}).values():
@@ -1788,6 +2082,7 @@ def _collect_external_sensing_reads(all_targets):
                 _scan_body(s["sub"], target_name)
             if s.get("sub2"):
                 _scan_body(s["sub2"], target_name)
+
     for t in all_targets:
         tname = t.get("name", "")
         for p in t.get("procedures", []):
@@ -1800,6 +2095,7 @@ def _collect_external_sensing_reads(all_targets):
 def _collect_var_reads(procedures, hats):
     """Return set of variable names that are read in any hat or procedure body."""
     reads = set()
+
     def _scan_expr(node):
         if isinstance(node, dict):
             if node.get("kind") == "var":
@@ -1814,6 +2110,7 @@ def _collect_var_reads(procedures, hats):
         elif isinstance(node, list):
             for v in node:
                 _scan_expr(v)
+
     def _scan_body(body):
         for s in body:
             # Check args for variable reads
@@ -1833,6 +2130,7 @@ def _collect_var_reads(procedures, hats):
                 _scan_body(s["sub"])
             if s.get("sub2"):
                 _scan_body(s["sub2"])
+
     for p in procedures:
         _scan_body(p["body"])
     for h in hats:
@@ -1872,6 +2170,7 @@ def _elim_unused_vars(variables, procedures, hats, external_reads=None):
 
 # ---- 27. CFG simplification (flatten nested single-child blocks) --------
 
+
 def _cfg_simplify(body):
     """Flatten trivial nested blocks: if { stmts } where condition is True, etc."""
     out = []
@@ -1892,8 +2191,12 @@ def _cfg_simplify(body):
                 inner_cond = inner.get("args", {}).get("CONDITION")
                 outer_cond = s.get("args", {}).get("CONDITION")
                 if inner_cond is not None and outer_cond is not None:
-                    merged = {"kind": "expr", "op": "operator_and",
-                              "args": {"0": outer_cond, "1": inner_cond}, "fields": {}}
+                    merged = {
+                        "kind": "expr",
+                        "op": "operator_and",
+                        "args": {"0": outer_cond, "1": inner_cond},
+                        "fields": {},
+                    }
                     s["args"]["CONDITION"] = merged
                     s["sub"] = inner.get("sub", [])
         out.append(s)
@@ -1901,6 +2204,7 @@ def _cfg_simplify(body):
 
 
 # ---- 28. Nested repeat collapse ------------------------------------------
+
 
 def _collapse_nested_repeats(body):
     """repeat a { repeat b { body } } → repeat a*b { body } when inner body is pure."""
@@ -1918,7 +2222,10 @@ def _collapse_nested_repeats(body):
                 outer_times = s.get("args", {}).get("TIMES", {})
                 inner = sub[0]
                 inner_times = inner.get("args", {}).get("TIMES", {})
-                if outer_times.get("kind") == "const" and inner_times.get("kind") == "const":
+                if (
+                    outer_times.get("kind") == "const"
+                    and inner_times.get("kind") == "const"
+                ):
                     ov = outer_times.get("v", 0)
                     iv = inner_times.get("v", 0)
                     if isinstance(ov, (int, float)) and isinstance(iv, (int, float)):
@@ -1930,6 +2237,7 @@ def _collapse_nested_repeats(body):
 
 
 # ---- Master simplification pass (statement level) -----------------------
+
 
 def _ir_simplify_body(body):
     """Apply all statement-level simplifications."""
@@ -1985,8 +2293,10 @@ def _ir_simplify_body(body):
                     s["op"] = "control_if"
                     cond = s["args"].get("CONDITION", {"kind": "const", "v": 1.0})
                     s["args"]["CONDITION"] = {
-                        "kind": "expr", "op": "operator_not",
-                        "args": {"0": cond}, "fields": {}
+                        "kind": "expr",
+                        "op": "operator_not",
+                        "args": {"0": cond},
+                        "fields": {},
                     }
                     s["sub"] = sub2
                     if "sub2" in s:
@@ -2051,7 +2361,9 @@ def _ir_simplify_body(body):
             if last["op"] == "procedures_call":
                 lname = last.get("fields", {}).get("PROCCODE", "")
                 sname = s.get("fields", {}).get("PROCCODE", "")
-                if lname == sname and str(last.get("args", {}).get("_args", [])) == str(s.get("args", {}).get("_args", [])):
+                if lname == sname and str(last.get("args", {}).get("_args", [])) == str(
+                    s.get("args", {}).get("_args", [])
+                ):
                     continue
 
         # PATCH 7: broadcast + stop-all → broadcast_and_wait (prevents
@@ -2070,6 +2382,7 @@ def _ir_simplify_body(body):
 
 # ---- 12. Dead-code elimination after terminators -------------------------
 
+
 def _ir_dead_stmt_elim(body):
     """Remove statements after terminators (control_stop).
     All control_stop modes return from the generator, so statements
@@ -2084,6 +2397,7 @@ def _ir_dead_stmt_elim(body):
 
 # ---- PATCH 14. Collapse list reset+add patterns ---------------------------
 
+
 def _collapse_list_resets(body):
     """Collapse 'delete all of L' followed by N 'add X to L' into a single
     list-literal assignment: L = [X, Y, Z, ...]."""
@@ -2091,26 +2405,34 @@ def _collapse_list_resets(body):
     i = 0
     while i < len(body):
         s = body[i]
-        if (s.get("op") == "data_deletealloflist"
-                and i + 1 < len(body)
-                and body[i + 1].get("op") == "data_addtolist"):
+        if (
+            s.get("op") == "data_deletealloflist"
+            and i + 1 < len(body)
+            and body[i + 1].get("op") == "data_addtolist"
+        ):
             lst_name = s.get("fields", {}).get("LIST", "")
             items = []
             j = i + 1
             while j < len(body):
                 sj = body[j]
-                if (sj.get("op") == "data_addtolist"
-                        and sj.get("fields", {}).get("LIST", "") == lst_name):
-                    items.append(sj.get("args", {}).get("ITEM", {"kind": "const", "v": ""}))
+                if (
+                    sj.get("op") == "data_addtolist"
+                    and sj.get("fields", {}).get("LIST", "") == lst_name
+                ):
+                    items.append(
+                        sj.get("args", {}).get("ITEM", {"kind": "const", "v": ""})
+                    )
                     j += 1
                 else:
                     break
             if len(items) >= 2:
-                out.append({
-                    "op": "_list_direct_assign",
-                    "fields": {"LIST": lst_name},
-                    "args": {"ITEMS": items},
-                })
+                out.append(
+                    {
+                        "op": "_list_direct_assign",
+                        "fields": {"LIST": lst_name},
+                        "args": {"ITEMS": items},
+                    }
+                )
                 i = j
                 continue
         out.append(s)
@@ -2119,6 +2441,7 @@ def _collapse_list_resets(body):
 
 
 # ---- 22. Tail-call / redundant call elimination -------------------------
+
 
 def _tail_call_elim(procedures):
     """Inline tail calls: if a procedure body is a single call to another
@@ -2134,6 +2457,7 @@ def _tail_call_elim(procedures):
                     # Map caller args to target parameter names before copying body
                     call_args = body[0].get("args", {}).get("_args", [])
                     target_args = target.get("args", [])
+
                     # Purity guard: skip inlining if any caller arg is dynamic.
                     # Without this, picking e.g. pick_random(1,10) as an arg and
                     # referencing that parameter twice in the inlined body would
@@ -2147,18 +2471,23 @@ def _tail_call_elim(procedures):
                         if k == "expr":
                             return a.get("op", "") in _PURE_OPS
                         return False  # "call" or anything else is not safe
+
                     if any(not _arg_is_pure(a) for a in call_args):
                         continue
                     # Build substitution: param_name -> caller_arg_value
                     subst = {}
                     for i, arg_name in enumerate(target_args):
                         if i < len(call_args) and call_args[i] is not None:
-                            subst[arg_name] = call_args[i] 
+                            subst[arg_name] = call_args[i]
                     # Copy and substitute arg refs in the target body
                     new_body = [dict(s) for s in target["body"]]
+
                     def _subst_expr(node):
                         if isinstance(node, dict):
-                            if node.get("kind") == "arg" and node.get("name", "") in subst:
+                            if (
+                                node.get("kind") == "arg"
+                                and node.get("name", "") in subst
+                            ):
                                 return subst[node["name"]]
                             a = node.get("args") or {}
                             if isinstance(a, dict):
@@ -2166,14 +2495,18 @@ def _tail_call_elim(procedures):
                             elif isinstance(a, list):
                                 node["args"] = [_subst_expr(v) for v in a]
                         return node
+
                     def _subst_stmt(stmt):
-                        stmt["args"] = {k: _subst_expr(v) for k, v in stmt.get("args", {}).items()}
+                        stmt["args"] = {
+                            k: _subst_expr(v) for k, v in stmt.get("args", {}).items()
+                        }
                         if stmt.get("sub"):
                             for ss in stmt["sub"]:
                                 _subst_stmt(ss)
                         if stmt.get("sub2"):
                             for ss in stmt["sub2"]:
                                 _subst_stmt(ss)
+
                     for s in new_body:
                         _subst_stmt(s)
                     p["body"] = new_body
@@ -2182,6 +2515,7 @@ def _tail_call_elim(procedures):
 
 # ---- 23. Argument default flattening ------------------------------------
 
+
 def _replace_in_expr(node, arg_name, const_val):
     """Replace all arg references in an expression with a constant."""
     if isinstance(node, dict):
@@ -2189,19 +2523,24 @@ def _replace_in_expr(node, arg_name, const_val):
             return dict(const_val)
         if "args" in node:
             if isinstance(node["args"], dict):
-                node["args"] = {k: _replace_in_expr(v, arg_name, const_val)
-                                 for k, v in node["args"].items()}
+                node["args"] = {
+                    k: _replace_in_expr(v, arg_name, const_val)
+                    for k, v in node["args"].items()
+                }
             elif isinstance(node["args"], list):
-                node["args"] = [_replace_in_expr(v, arg_name, const_val)
-                                for v in node["args"]]
+                node["args"] = [
+                    _replace_in_expr(v, arg_name, const_val) for v in node["args"]
+                ]
     return node
 
 
 def _replace_arg_refs(body, arg_name, const_val):
     """Replace all arg refs in a statement body with a constant."""
     for s in body:
-        s["args"] = {k: _replace_in_expr(v, arg_name, const_val)
-                      for k, v in s.get("args", {}).items()}
+        s["args"] = {
+            k: _replace_in_expr(v, arg_name, const_val)
+            for k, v in s.get("args", {}).items()
+        }
         if s.get("sub"):
             _replace_arg_refs(s["sub"], arg_name, const_val)
         if s.get("sub2"):
@@ -2250,8 +2589,7 @@ def _flatten_arg_defaults(procedures, hats):
                 else:
                     all_const = False
                     break
-            if all_const and vals and \
-               len(set(str(v.get("v")) for v in vals)) == 1:
+            if all_const and vals and len(set(str(v.get("v")) for v in vals)) == 1:
                 # All call sites pass the same constant -> inline it
                 # We replace arg refs in the body but KEEP the param
                 # in the signature (call sites are not updated, so
@@ -2262,6 +2600,7 @@ def _flatten_arg_defaults(procedures, hats):
 
 
 # ---- Main pipeline ------------------------------------------------------
+
 
 def _ir_opt(procedures, hats, cse_prefix=None):
     """Run all IR optimisation passes in order."""
@@ -2369,6 +2708,7 @@ def extract_sb3(sb3_path, extract_dir):
     disk — all info main.py needs is embedded into the generated code.
     """
     import zipfile
+
     sb3_path = Path(sb3_path)
     extract_dir = Path(extract_dir)
     if not sb3_path.exists():
@@ -2382,7 +2722,9 @@ def extract_sb3(sb3_path, extract_dir):
                 with z.open("project.json") as fp:
                     data = json.load(fp)
             except json.JSONDecodeError as e:
-                raise ValueError(f"project.json inside {sb3_path} is not valid JSON: {e}") from e
+                raise ValueError(
+                    f"project.json inside {sb3_path} is not valid JSON: {e}"
+                ) from e
             # stream asset bytes straight into data/<target>/<realname>.<ext>
             _organize_assets_from_zip(z, data, extract_dir)
     except zipfile.BadZipFile as e:
@@ -2416,7 +2758,9 @@ def _organize_assets_from_zip(z, data, out_dir):
                         with z.open(raw) as src, open(dst, "wb") as out:
                             out.write(src.read())
                     except Exception as e:
-                        log.warning("skipping unreadable asset %s in %s: %s", raw, tname, e)
+                        log.warning(
+                            "skipping unreadable asset %s in %s: %s", raw, tname, e
+                        )
                         continue
                 # point the metadata at the real filename
                 c["md5ext"] = fname
@@ -2426,7 +2770,7 @@ def _organize_assets_from_zip(z, data, out_dir):
 def _parse_var_value(v):
     if isinstance(v, str):
         try:
-            return int(v) if v.lstrip('-').isdigit() else float(v)
+            return int(v) if v.lstrip("-").isdigit() else float(v)
         except (ValueError, TypeError):
             pass
     return v
@@ -2456,39 +2800,49 @@ def parse_project(project_path):
         parser = IRParser(t, broadcasts)
         procedures, hats, scripts = parser.build()
         procedures, hats, cse_prefix = _ir_opt(procedures, hats)
-        variables = {v[0]: _parse_var_value(v[1]) for v in t.get("variables", {}).values()}
+        variables = {
+            v[0]: _parse_var_value(v[1]) for v in t.get("variables", {}).values()
+        }
         # NOTE: _elim_unused_vars / _elim_unused_var_stmts are deferred until
         # after we've scanned ALL targets for cross-sprite sensing_of reads
         # (see Phase 2 and Phase 3 below).  Running them here would prune
         # assignments to variables that are only read by OTHER sprites.
         lists = {li[0]: list(li[1]) for li in t.get("lists", {}).values()}
-        costumes = [{
-            "name": c.get("name"),
-            "md5ext": c.get("md5ext"),
-            "bitmapResolution": c.get("bitmapResolution", 1),
-            "rotationCenterX": c.get("rotationCenterX", 0),
-            "rotationCenterY": c.get("rotationCenterY", 0),
-        } for c in t.get("costumes", [])]
-        sounds = [{
-            "name": s.get("name"),
-            "md5ext": s.get("md5ext"),
-            "soundId": s.get("soundId"),
-            "rate": s.get("rate"),
-            "sampleCount": s.get("sampleCount"),
-            "dataFormat": s.get("dataFormat"),
-        } for s in t.get("sounds", [])]
-        targets.append({
-            "name": t.get("name"),
-            "isStage": t.get("isStage", False),
-            "variables": variables,
-            "lists": lists,
-            "costumes": costumes,
-            "sounds": sounds,
-            "procedures": procedures,
-            "hats": hats,
-            "cse_prefix": cse_prefix,
-            "scripts": scripts,
-        })
+        costumes = [
+            {
+                "name": c.get("name"),
+                "md5ext": c.get("md5ext"),
+                "bitmapResolution": c.get("bitmapResolution", 1),
+                "rotationCenterX": c.get("rotationCenterX", 0),
+                "rotationCenterY": c.get("rotationCenterY", 0),
+            }
+            for c in t.get("costumes", [])
+        ]
+        sounds = [
+            {
+                "name": s.get("name"),
+                "md5ext": s.get("md5ext"),
+                "soundId": s.get("soundId"),
+                "rate": s.get("rate"),
+                "sampleCount": s.get("sampleCount"),
+                "dataFormat": s.get("dataFormat"),
+            }
+            for s in t.get("sounds", [])
+        ]
+        targets.append(
+            {
+                "name": t.get("name"),
+                "isStage": t.get("isStage", False),
+                "variables": variables,
+                "lists": lists,
+                "costumes": costumes,
+                "sounds": sounds,
+                "procedures": procedures,
+                "hats": hats,
+                "cse_prefix": cse_prefix,
+                "scripts": scripts,
+            }
+        )
 
     # ---- Phase 2: scan ALL targets for cross-sprite sensing_of reads -----
     # Before eliminating variables we must know which variables are read
@@ -2512,13 +2866,20 @@ def parse_project(project_path):
         if tgt["isStage"]:
             keep_vars = set(tgt["variables"].keys()) | all_read
             for p in tgt["procedures"]:
-                p["body"] = _elim_unused_var_stmts(p["body"], keep_vars, tgt["cse_prefix"])
+                p["body"] = _elim_unused_var_stmts(
+                    p["body"], keep_vars, tgt["cse_prefix"]
+                )
             for h in tgt["hats"]:
-                h["body"] = _elim_unused_var_stmts(h["body"], keep_vars, tgt["cse_prefix"])
+                h["body"] = _elim_unused_var_stmts(
+                    h["body"], keep_vars, tgt["cse_prefix"]
+                )
             continue
         ext_vars = external_reads.get(tgt["name"], set())
         tgt["variables"] = _elim_unused_vars(
-            tgt["variables"], tgt["procedures"], tgt["hats"], ext_vars,
+            tgt["variables"],
+            tgt["procedures"],
+            tgt["hats"],
+            ext_vars,
         )
         keep_vars = set(tgt["variables"].keys()) | stage_var_names | all_read
         for p in tgt["procedures"]:
@@ -2532,6 +2893,7 @@ def parse_project(project_path):
 # ===================================================================
 #  TEXT EXTRACTOR  (human-readable pseudo-code)
 # ===================================================================
+
 
 class TextExtractor:
     """Render a Scratch target as human-readable pseudo-code."""
@@ -2634,8 +2996,9 @@ class TextExtractor:
         name = proccode
         for n in argnames:
             name = name.replace("%s", n, 1)
-        args = [self.render_input(inputs[aid]) if aid in inputs else ""
-                for aid in argids]
+        args = [
+            self.render_input(inputs[aid]) if aid in inputs else "" for aid in argids
+        ]
         if args and any(a.strip() for a in args):
             return f"{name} ({', '.join(args)})"
         return name
@@ -2653,8 +3016,11 @@ class TextExtractor:
 
             if op in SUBSTACKS:
                 keys = SUBSTACKS[op]
-                head_inp = (self.render_input(inp.get(keys[0]))
-                            if keys[0] in ("CONDITION", "TIMES", "VALUE", "VARIABLE") else "")
+                head_inp = (
+                    self.render_input(inp.get(keys[0]))
+                    if keys[0] in ("CONDITION", "TIMES", "VALUE", "VARIABLE")
+                    else ""
+                )
                 head = self._stmt_head(op, b, head_inp)
                 lines.append(pad + head)
                 sub = inp.get("SUBSTACK")
@@ -2667,7 +3033,11 @@ class TextExtractor:
                         lines += self.render_stmt(sub2[1], indent + 1)
             elif op == "procedures_definition":
                 proto = inp.get("custom_block", [None, None])[1]
-                pname = self._proccode(self.blocks[proto]) if isinstance(proto, str) and proto in self.blocks else "procedure"
+                pname = (
+                    self._proccode(self.blocks[proto])
+                    if isinstance(proto, str) and proto in self.blocks
+                    else "procedure"
+                )
                 warp = ""
                 if isinstance(proto, str) and proto in self.blocks:
                     if self.blocks[proto].get("mutation", {}).get("warp") == "true":
@@ -2728,8 +3098,12 @@ class TextExtractor:
 
     def extract(self):
         roots = [k for k, b in self.blocks.items() if b.get("parent") is None]
-        defs = [k for k in roots if self.blocks[k].get("opcode") == "procedures_definition"]
-        hats = [k for k in roots if self.blocks[k].get("opcode") != "procedures_definition"]
+        defs = [
+            k for k in roots if self.blocks[k].get("opcode") == "procedures_definition"
+        ]
+        hats = [
+            k for k in roots if self.blocks[k].get("opcode") != "procedures_definition"
+        ]
         scripts = []
         for k in defs:
             scripts.append(self.render_stmt(k, 0))
@@ -2752,8 +3126,7 @@ def extract_text(project_path, output_dir):
         name = t.get("name", f"target_{ti}")
         fname = f"{ti:02d}_{sanitize(name)}.txt"
 
-        vars_block = [f"  {v[0]} = {v[1]!r}"
-                      for v in t.get("variables", {}).values()]
+        vars_block = [f"  {v[0]} = {v[1]!r}" for v in t.get("variables", {}).values()]
         lists_block = []
         for lid, li in t.get("lists", {}).items():
             val = li[1]
@@ -2765,8 +3138,10 @@ def extract_text(project_path, output_dir):
         ex = TextExtractor(t)
         scripts = ex.extract()
 
-        lines = [f"# Target: {name}  (isStage={t.get('isStage')})",
-                 f"# blocks: {len(ex.blocks)}\n"]
+        lines = [
+            f"# Target: {name}  (isStage={t.get('isStage')})",
+            f"# blocks: {len(ex.blocks)}\n",
+        ]
         if vars_block:
             lines.append("VARIABLES:\n" + "\n".join(vars_block) + "\n")
         if lists_block:
@@ -2796,6 +3171,7 @@ def extract_text(project_path, output_dir):
 # ===================================================================
 #  PYTHON EMITTER  (IR → real Python modules, no JSON blobs)
 # ===================================================================
+
 
 def emit_python(ir_data, output_dir, opts=None):
     """Generate one Python module per sprite from IR data.
@@ -2854,8 +3230,12 @@ def emit_python(ir_data, output_dir, opts=None):
                 tdir.mkdir(parents=True, exist_ok=True)
                 (tdir / f"{pyname(lname)}.json").write_text(blob, encoding="utf-8")
                 big_lists[lname] = f"data/{name}/{pyname(lname)}.json"
-                log.info("externalised list %r of %r (%d bytes)",
-                         lname, name, len(blob.encode("utf-8")))
+                log.info(
+                    "externalised list %r of %r (%d bytes)",
+                    lname,
+                    name,
+                    len(blob.encode("utf-8")),
+                )
         # Canonical set of global (stage-owned) variable names, so the emitter
         # avoids the fast sp.vars[...] path for globals a sprite may also carry.
         stage_globals = set()
@@ -2901,7 +3281,9 @@ def emit_python(ir_data, output_dir, opts=None):
         manifest_lines.append(f"    ({name!r}, {mod!r}),")
     manifest_lines.append("]")
     manifest_lines.append("")
-    (output_dir / "__manifest__.py").write_text("\n".join(manifest_lines), encoding="utf-8")
+    (output_dir / "__manifest__.py").write_text(
+        "\n".join(manifest_lines), encoding="utf-8"
+    )
 
     log.info("emission done — %d targets", len(generated))
 
@@ -2925,6 +3307,7 @@ def _generate_readme(output_dir, ir_data, generated, opts):
     """Write a README.md into the decompiled directory with run info."""
     output_dir = Path(output_dir)
     from datetime import datetime
+
     proj_name = ir_data.get("meta", {}).get("projectName") or "Scratch project"
     targets = ir_data.get("targets", [])
     n_sprites = sum(1 for t in targets if not t.get("isStage"))
@@ -3040,7 +3423,8 @@ class _PyEmitter:
         # procedures stripped during build() (//-prefixed and zero-width-space
         # comment blocks) must be no-oped, else `yield from None` crashes.
         self._proc_names = frozenset(
-            p.get("name") for p in target.get("procedures", []) if isinstance(p, dict))
+            p.get("name") for p in target.get("procedures", []) if isinstance(p, dict)
+        )
 
     def _is_own_var(self, name):
         """True iff `name` is a variable this target canonically owns and may
@@ -3076,8 +3460,17 @@ class _PyEmitter:
 
         reg_lines = []
         self._emit_register(reg_lines)
-        return "\n".join(header + [""] + sprite_lines + [""] + proc_lines
-                         + [""] + hat_lines + [""] + reg_lines)
+        return "\n".join(
+            header
+            + [""]
+            + sprite_lines
+            + [""]
+            + proc_lines
+            + [""]
+            + hat_lines
+            + [""]
+            + reg_lines
+        )
 
     def _pn(self, raw_name):
         return pyname(raw_name)
@@ -3161,7 +3554,9 @@ class _PyEmitter:
         if procs:
             init_lines.append("    sp._procs = {")
             for p in procs:
-                init_lines.append(f"        {p['name']!r}: procs._proc_{self._pn(p['name'])}, ")
+                init_lines.append(
+                    f"        {p['name']!r}: procs._proc_{self._pn(p['name'])}, "
+                )
             init_lines.append("    }")
         # hats
         for hi, h in enumerate(t.get("hats", [])):
@@ -3179,14 +3574,16 @@ class _PyEmitter:
                 fname = "hat_clone"
             else:
                 fname = f"hat_{self._pn(etype)}"
-            if hasattr(self, '_hat_order') and fname in self._hat_order:
+            if hasattr(self, "_hat_order") and fname in self._hat_order:
                 entries = self._hat_order[fname]
                 key = fname
                 fname = entries.pop(0)
                 if not entries:
                     del self._hat_order[key]
             ev_json = json.dumps(ev)
-            init_lines.append(f"    sp.hats.append({{\"event\": {ev_json}, \"body_gen\": getattr(hats, {fname!r})}})")
+            init_lines.append(
+                f'    sp.hats.append({{"event": {ev_json}, "body_gen": getattr(hats, {fname!r})}})'
+            )
         init_lines += [
             "    if sp.is_stage:",
             "        eng.set_stage(sp)",
@@ -3195,7 +3592,6 @@ class _PyEmitter:
         ]
         init_code = "\n".join(init_lines)
         return {"__init__.py": init_code, "procs.py": procs_code, "hats.py": hats_code}
-
 
     def _num_expr(self, node) -> str:
         """Emit a numeric coercion. If the node is a constant, emit the raw
@@ -3245,14 +3641,14 @@ class _PyEmitter:
             return json.dumps(v) if not isinstance(v, (int, float)) else repr(v)
         if kind == "var":
             # CSE variables are pure Python locals, not sprite properties
-            if node['name'].startswith(self.cse_prefix):
-                return node['name']
+            if node["name"].startswith(self.cse_prefix):
+                return node["name"]
             # Inline-procedure temporaries are function-scoped Python locals.
-            if node['name'].startswith("_inline_"):
-                return node['name']
+            if node["name"].startswith("_inline_"):
+                return node["name"]
             # Fast path for this target's own canonically-owned variables: hit
             # the dict directly (identical to __getitem__'s first branch).
-            if self._is_own_var(node['name']):
+            if self._is_own_var(node["name"]):
                 return f"sp.vars[{node['name']!r}]"
             return f"sp[{node['name']!r}]"
         if kind == "list":
@@ -3280,11 +3676,16 @@ class _PyEmitter:
                 oper = f.get("OPERATOR", "")
                 return f"{fn}({oper!r}, {self._expr(a.get('NUM'))})"
             if op in ("operator_not", "operator_round", "operator_length"):
-                key = {"operator_not": "OPERAND", "operator_round": "NUM",
-                       "operator_length": "STRING"}[op]
+                key = {
+                    "operator_not": "OPERAND",
+                    "operator_round": "NUM",
+                    "operator_length": "STRING",
+                }[op]
                 return f"{fn}({self._expr(a.get(key))})"
             # n-ary ops: chain calls for all args
-            _nary_ops = frozenset({"operator_add", "operator_multiply", "operator_and", "operator_or"})
+            _nary_ops = frozenset(
+                {"operator_add", "operator_multiply", "operator_and", "operator_or"}
+            )
             vals = [self._expr(v) for v in a.values()]
             if op in _nary_ops and len(vals) > 2:
                 # right-associative chain: fn(v0, fn(v1, fn(v2, ...)))
@@ -3302,15 +3703,22 @@ class _PyEmitter:
         if op == "sensing_dayssince2000":
             return "(_sensing_days2000())"
 
-        if op in ("sensing_mousex", "sensing_mousey", "sensing_mousedown", "sensing_timer"):
-            m = {"sensing_mousex": "_eng._mouse['x']",
-                 "sensing_mousey": "_eng._mouse['y']",
-                 "sensing_mousedown": "_eng._mouse['down']",
-                 "sensing_timer": "time.time() - _eng._timer_start"}
+        if op in (
+            "sensing_mousex",
+            "sensing_mousey",
+            "sensing_mousedown",
+            "sensing_timer",
+        ):
+            m = {
+                "sensing_mousex": "_eng._mouse['x']",
+                "sensing_mousey": "_eng._mouse['y']",
+                "sensing_mousedown": "_eng._mouse['down']",
+                "sensing_timer": "time.time() - _eng._timer_start",
+            }
             return m[op]
 
         if op == "sensing_keypressed":
-            _key_expr = self._expr(a.get('KEY'))
+            _key_expr = self._expr(a.get("KEY"))
             return f"(_str({_key_expr}) == 'any' and any(_eng._key_states.values())) or _eng._key_states.get(_str({_key_expr}), False)"
 
         if op == "sensing_keyoptions":
@@ -3324,7 +3732,7 @@ class _PyEmitter:
             return f"_sensing_current({unit!r})"
 
         if op == "sensing_distanceto":
-            subj = self._expr(a.get('SUBJECT'))
+            subj = self._expr(a.get("SUBJECT"))
             return f"(_sensing_distanceto(sp, {subj}))"
 
         if op == "sensing_touchingcolor":
@@ -3338,8 +3746,11 @@ class _PyEmitter:
             return f"_sensing_of(sp, {self._expr(a.get('OBJECT'))}, {prop!r})"
 
         if op in ("motion_xposition", "motion_yposition", "motion_direction"):
-            m = {"motion_xposition": "sp.x", "motion_yposition": "sp.y",
-                 "motion_direction": "((sp.direction + 180) % 360) - 180"}
+            m = {
+                "motion_xposition": "sp.x",
+                "motion_yposition": "sp.y",
+                "motion_direction": "((sp.direction + 180) % 360) - 180",
+            }
             return m[op]
 
         if op == "looks_size":
@@ -3365,8 +3776,12 @@ class _PyEmitter:
         if op in ("sensing_loudness", "sensing_loud"):
             return "(_sensing_loudness())"
 
-        if op in ("data_itemoflist", "data_itemnumoflist",
-                  "data_lengthoflist", "data_listcontainsitem"):
+        if op in (
+            "data_itemoflist",
+            "data_itemnumoflist",
+            "data_lengthoflist",
+            "data_listcontainsitem",
+        ):
             lst = f.get("LIST", "")
             if op == "data_itemoflist":
                 return f"sp.list_item({lst!r}, {self._expr(a.get('INDEX'))})"
@@ -3397,7 +3812,9 @@ class _PyEmitter:
             _cname = f.get("COSTUME")
             if isinstance(_cname, list) and _cname:
                 return repr(_cname[0])
-            return "sp.costumes[sp._costume_index].get('name', '') if sp.costumes else ''"
+            return (
+                "sp.costumes[sp._costume_index].get('name', '') if sp.costumes else ''"
+            )
         if op == "looks_backdrops":
             _bname = f.get("COSTUME")
             if isinstance(_bname, list) and _bname:
@@ -3425,7 +3842,7 @@ class _PyEmitter:
 
         # data
         if op == "data_setvariableto":
-            var_name = f['VARIABLE']
+            var_name = f["VARIABLE"]
             # CSE variables are pure Python locals, not sprite properties
             if var_name.startswith(self.cse_prefix):
                 return f"{pad}{var_name} = {self._expr(a.get('VALUE'))}"
@@ -3437,17 +3854,23 @@ class _PyEmitter:
                 return f"{pad}sp.vars[{var_name!r}] = {self._expr(a.get('VALUE'))}"
             return f"{pad}sp[{var_name!r}] = {self._expr(a.get('VALUE'))}"
         if op == "data_changevariableby":
-            var_name = f['VARIABLE']
+            var_name = f["VARIABLE"]
             if var_name.startswith(self.cse_prefix):
-                return (f"{pad}{var_name} = "
-                        f"_num({var_name}) + _num({self._expr(a.get('VALUE'))})")
+                return (
+                    f"{pad}{var_name} = "
+                    f"_num({var_name}) + _num({self._expr(a.get('VALUE'))})"
+                )
             if var_name.startswith("_inline_"):
-                return (f"{pad}{var_name} = "
-                        f"_num({var_name}) + _num({self._expr(a.get('VALUE'))})")
+                return (
+                    f"{pad}{var_name} = "
+                    f"_num({var_name}) + _num({self._expr(a.get('VALUE'))})"
+                )
             # Fast path for own vars: mirror Sprite.change_var but skip dispatch.
             if self._is_own_var(var_name):
-                return (f"{pad}sp.vars[{var_name!r}] = "
-                        f"_num(sp.vars[{var_name!r}]) + _num({self._expr(a.get('VALUE'))})")
+                return (
+                    f"{pad}sp.vars[{var_name!r}] = "
+                    f"_num(sp.vars[{var_name!r}]) + _num({self._expr(a.get('VALUE'))})"
+                )
             return f"{pad}sp.change_var({var_name!r}, {self._expr(a.get('VALUE'))})"
         if op == "data_addtolist":
             return f"{pad}sp.list_add({f['LIST']!r}, {self._expr(a.get('ITEM'))})"
@@ -3481,12 +3904,14 @@ class _PyEmitter:
         if op == "control_for_each":
             return self._emit_for_each(s, indent)
         if op == "control_wait":
-            duration = self._expr(a.get('DURATION'))
+            duration = self._expr(a.get("DURATION"))
             if self._warp:
                 return f"{pad}# warp-mode: wait {duration} stripped (Scratch turns off warp on wait)"
-            return (f"{pad}_wstart = time.time()\n"
-                    f"{pad}while time.time() - _wstart < _num({duration}):\n"
-                    f"{pad}    yield")
+            return (
+                f"{pad}_wstart = time.time()\n"
+                f"{pad}while time.time() - _wstart < _num({duration}):\n"
+                f"{pad}    yield"
+            )
         if op == "control_wait_until":
             body = f"{pad}while not {self._expr(a.get('CONDITION'))}:\n{pad}  yield"
             if self._warp:
@@ -3524,7 +3949,11 @@ class _PyEmitter:
             # to `yield from None` and crash on frame 1. Emit a no-op yield
             # instead (yield, not pass, preserves frame boundaries in tight
             # loops that contained only these comment calls).
-            if name.startswith("//") or "\u200b" in name or name not in self._proc_names:
+            if (
+                name.startswith("//")
+                or "\u200b" in name
+                or name not in self._proc_names
+            ):
                 return f"{pad}pass  # no-op: stripped/dead proc {name!r}"
             args_list = ", ".join(self._expr(x) for x in a.get("_args", []))
             # Yield from the procedure generator to block the caller until completion
@@ -3536,60 +3965,76 @@ class _PyEmitter:
 
         # motion
         if op == "motion_setx":
-            return (f"{pad}sp.x = {self._num_expr(a.get('X'))}\n"
-                    f"{pad}if _eng and _eng.display: _eng.display.pen_move(sp, sp.x, sp.y)")
+            return (
+                f"{pad}sp.x = {self._num_expr(a.get('X'))}\n"
+                f"{pad}if _eng and _eng.display: _eng.display.pen_move(sp, sp.x, sp.y)"
+            )
         if op == "motion_sety":
-            return (f"{pad}sp.y = {self._num_expr(a.get('Y'))}\n"
-                    f"{pad}if _eng and _eng.display: _eng.display.pen_move(sp, sp.x, sp.y)")
+            return (
+                f"{pad}sp.y = {self._num_expr(a.get('Y'))}\n"
+                f"{pad}if _eng and _eng.display: _eng.display.pen_move(sp, sp.x, sp.y)"
+            )
         if op == "motion_changexby":
-            return (f"{pad}sp.x += {self._num_expr(a.get('DX'))}\n"
-                    f"{pad}if _eng and _eng.display: _eng.display.pen_move(sp, sp.x, sp.y)")
+            return (
+                f"{pad}sp.x += {self._num_expr(a.get('DX'))}\n"
+                f"{pad}if _eng and _eng.display: _eng.display.pen_move(sp, sp.x, sp.y)"
+            )
         if op == "motion_changeyby":
-            return (f"{pad}sp.y += {self._num_expr(a.get('DY'))}\n"
-                    f"{pad}if _eng and _eng.display: _eng.display.pen_move(sp, sp.x, sp.y)")
+            return (
+                f"{pad}sp.y += {self._num_expr(a.get('DY'))}\n"
+                f"{pad}if _eng and _eng.display: _eng.display.pen_move(sp, sp.x, sp.y)"
+            )
         if op == "motion_gotoxy":
-            return (f"{pad}sp.x, sp.y = {self._num_expr(a.get('X'))}, {self._num_expr(a.get('Y'))}\n"
-                    f"{pad}if _eng and _eng.display:\n"
-                    f"{pad}    _eng.display.pen_move(sp, sp.x, sp.y)\n"
-                    f"{pad}    sp._px, sp._py = sp.x, sp.y")
+            return (
+                f"{pad}sp.x, sp.y = {self._num_expr(a.get('X'))}, {self._num_expr(a.get('Y'))}\n"
+                f"{pad}if _eng and _eng.display:\n"
+                f"{pad}    _eng.display.pen_move(sp, sp.x, sp.y)\n"
+                f"{pad}    sp._px, sp._py = sp.x, sp.y"
+            )
         if op == "motion_movesteps":
-            return (f"{pad}_r = math.radians(sp.direction)\n"
-                    f"{pad}sp.x += {self._num_expr(a.get('STEPS'))} * math.sin(_r)\n"
-                    f"{pad}sp.y += {self._num_expr(a.get('STEPS'))} * math.cos(_r)\n"
-                    f"{pad}if _eng and _eng.display: _eng.display.pen_move(sp, sp.x, sp.y)")
+            return (
+                f"{pad}_r = math.radians(sp.direction)\n"
+                f"{pad}sp.x += {self._num_expr(a.get('STEPS'))} * math.sin(_r)\n"
+                f"{pad}sp.y += {self._num_expr(a.get('STEPS'))} * math.cos(_r)\n"
+                f"{pad}if _eng and _eng.display: _eng.display.pen_move(sp, sp.x, sp.y)"
+            )
         if op == "motion_turnright":
             return f"{pad}sp.direction = (sp.direction + {self._num_expr(a.get('DEGREES'))}) % 360"
         if op == "motion_turnleft":
             return f"{pad}sp.direction = (sp.direction - {self._num_expr(a.get('DEGREES'))}) % 360"
         if op == "motion_goto":
-            tgt = self._expr(a.get('TOWARDS'))
-            return (f"{pad}_gt = {tgt}\n"
-                    f"{pad}_ox, _oy = sp.x, sp.y\n"
-                    f"{pad}if _gt == '_mouse_':\n"
-                    f"{pad}    sp.x, sp.y = _eng._mouse['x'], _eng._mouse['y']\n"
-                    f"{pad}elif _gt == '_random_':\n"
-                    f"{pad}    sp.x, sp.y = _random(-240, 240), _random(-180, 180)\n"
-                    f"{pad}elif _gt == '_stage_':\n"
-                    f"{pad}    sp.x, sp.y = 0.0, 0.0\n"
-                    f"{pad}else:\n"
-                    f"{pad}    _gs = _eng.sprites.get(_str(_gt))\n"
-                    f"{pad}    if _gs is not None:\n"
-                    f"{pad}        sp.x, sp.y = _gs.x, _gs.y\n"
-                    f"{pad}if _eng and _eng.display and (sp.x != _ox or sp.y != _oy):\n"
-                    f"{pad}    _eng.display.pen_move(sp, sp.x, sp.y)")
+            tgt = self._expr(a.get("TOWARDS"))
+            return (
+                f"{pad}_gt = {tgt}\n"
+                f"{pad}_ox, _oy = sp.x, sp.y\n"
+                f"{pad}if _gt == '_mouse_':\n"
+                f"{pad}    sp.x, sp.y = _eng._mouse['x'], _eng._mouse['y']\n"
+                f"{pad}elif _gt == '_random_':\n"
+                f"{pad}    sp.x, sp.y = _random(-240, 240), _random(-180, 180)\n"
+                f"{pad}elif _gt == '_stage_':\n"
+                f"{pad}    sp.x, sp.y = 0.0, 0.0\n"
+                f"{pad}else:\n"
+                f"{pad}    _gs = _eng.sprites.get(_str(_gt))\n"
+                f"{pad}    if _gs is not None:\n"
+                f"{pad}        sp.x, sp.y = _gs.x, _gs.y\n"
+                f"{pad}if _eng and _eng.display and (sp.x != _ox or sp.y != _oy):\n"
+                f"{pad}    _eng.display.pen_move(sp, sp.x, sp.y)"
+            )
         if op == "motion_pointindirection":
             return f"{pad}sp.direction = {self._num_expr(a.get('DIRECTION'))} % 360"
         if op == "motion_pointtowards":
-            tgt = self._expr(a.get('TOWARDS'))
-            return (f"{pad}_pt = {tgt}\n"
-                    f"{pad}if _pt == '_mouse_':\n"
-                    f"{pad}    _tx, _ty = _eng._mouse['x'], _eng._mouse['y']\n"
-                    f"{pad}elif _pt == '_stage_':\n"
-                    f"{pad}    _tx, _ty = 0.0, 0.0\n"
-                    f"{pad}else:\n"
-                    f"{pad}    _gs = _eng.sprites.get(_str(_pt))\n"
-                    f"{pad}    _tx, _ty = (_gs.x, _gs.y) if _gs is not None else (sp.x, sp.y)\n"
-                    f"{pad}sp.direction = (90 - math.degrees(math.atan2(_ty - sp.y, _tx - sp.x))) % 360")
+            tgt = self._expr(a.get("TOWARDS"))
+            return (
+                f"{pad}_pt = {tgt}\n"
+                f"{pad}if _pt == '_mouse_':\n"
+                f"{pad}    _tx, _ty = _eng._mouse['x'], _eng._mouse['y']\n"
+                f"{pad}elif _pt == '_stage_':\n"
+                f"{pad}    _tx, _ty = 0.0, 0.0\n"
+                f"{pad}else:\n"
+                f"{pad}    _gs = _eng.sprites.get(_str(_pt))\n"
+                f"{pad}    _tx, _ty = (_gs.x, _gs.y) if _gs is not None else (sp.x, sp.y)\n"
+                f"{pad}sp.direction = (90 - math.degrees(math.atan2(_ty - sp.y, _tx - sp.x))) % 360"
+            )
         if op == "motion_setrotationstyle":
             return f"{pad}sp.rotation_style = {f.get('STYLE')!r}"
         if op == "motion_ifonedgebounce":
@@ -3597,60 +4042,67 @@ class _PyEmitter:
 
         # glide blocks (wall-clock paced; suppressed inside warp mode)
         if op == "motion_glidesecstoxy":
-            secs = self._num_expr(a.get('SECS'))
-            x_expr = self._num_expr(a.get('X'))
-            y_expr = self._num_expr(a.get('Y'))
+            secs = self._num_expr(a.get("SECS"))
+            x_expr = self._num_expr(a.get("X"))
+            y_expr = self._num_expr(a.get("Y"))
             _yield_line = "" if self._warp else f"{pad}    if not self._warp: yield"
-            return (f"{pad}_gx, _gy = {x_expr}, {y_expr}\n"
-                    f"{pad}_gs = max(0.016, {secs})\n"
-                    f"{pad}_sx, _sy = sp.x, sp.y\n"
-                    f"{pad}_gstart = time.time()\n"
-                    f"{pad}_gmax = max(2, int(_gs * (getattr(_eng, 'target_fps', 30) or 30)) + 2)\n"
-                    f"{pad}for _gi in range(_gmax):\n"
-                    f"{pad}    _gel = time.time() - _gstart\n"
-                    f"{pad}    _t = min(1.0, _gel / _gs)\n"
-                    f"{pad}    sp.x = _sx + (_gx - _sx) * _t\n"
-                    f"{pad}    sp.y = _sy + (_gy - _sy) * _t\n"
-                    f"{pad}    if _eng and _eng.display: _eng.display.pen_move(sp, sp.x, sp.y)\n"
-                    f"{pad}    if _t >= 1.0: break\n"
-                    f"{_yield_line}")
+            return (
+                f"{pad}_gx, _gy = {x_expr}, {y_expr}\n"
+                f"{pad}_gs = max(0.016, {secs})\n"
+                f"{pad}_sx, _sy = sp.x, sp.y\n"
+                f"{pad}_gstart = time.time()\n"
+                f"{pad}_gmax = max(2, int(_gs * (getattr(_eng, 'target_fps', 30) or 30)) + 2)\n"
+                f"{pad}for _gi in range(_gmax):\n"
+                f"{pad}    _gel = time.time() - _gstart\n"
+                f"{pad}    _t = min(1.0, _gel / _gs)\n"
+                f"{pad}    sp.x = _sx + (_gx - _sx) * _t\n"
+                f"{pad}    sp.y = _sy + (_gy - _sy) * _t\n"
+                f"{pad}    if _eng and _eng.display: _eng.display.pen_move(sp, sp.x, sp.y)\n"
+                f"{pad}    if _t >= 1.0: break\n"
+                f"{_yield_line}"
+            )
         if op == "motion_glideto":
-            secs = self._num_expr(a.get('SECS'))
-            tgt = self._expr(a.get('TOWARDS'))
+            secs = self._num_expr(a.get("SECS"))
+            tgt = self._expr(a.get("TOWARDS"))
             _yield_line = "" if self._warp else f"{pad}    if not self._warp: yield"
-            return (f"{pad}_gtgt = {tgt}\n"
-                    f"{pad}if _gtgt == '_mouse_': _gx, _gy = _eng._mouse['x'], _eng._mouse['y']\n"
-                    f"{pad}elif _gtgt == '_random_': _gx, _gy = _random(-240, 240), _random(-180, 180)\n"
-                    f"{pad}elif _gtgt == '_stage_': _gx, _gy = 0.0, 0.0\n"
-                    f"{pad}else: _gs2 = _eng.sprites.get(_str(_gtgt)); _gx, _gy = (_gs2.x, _gs2.y) if _gs2 is not None else (sp.x, sp.y)\n"
-                    f"{pad}_gs = max(0.016, {secs})\n"
-                    f"{pad}_sx, _sy = sp.x, sp.y\n"
-                    f"{pad}_gstart = time.time()\n"
-                    f"{pad}_gmax = max(2, int(_gs * (getattr(_eng, 'target_fps', 30) or 30)) + 2)\n"
-                    f"{pad}for _gi in range(_gmax):\n"
-                    f"{pad}    _gel = time.time() - _gstart\n"
-                    f"{pad}    _t = min(1.0, _gel / _gs)\n"
-                    f"{pad}    sp.x = _sx + (_gx - _sx) * _t\n"
-                    f"{pad}    sp.y = _sy + (_gy - _sy) * _t\n"
-                    f"{pad}    if _eng and _eng.display: _eng.display.pen_move(sp, sp.x, sp.y)\n"
-                    f"{pad}    if _t >= 1.0: break\n"
-                    f"{_yield_line}")
+            return (
+                f"{pad}_gtgt = {tgt}\n"
+                f"{pad}if _gtgt == '_mouse_': _gx, _gy = _eng._mouse['x'], _eng._mouse['y']\n"
+                f"{pad}elif _gtgt == '_random_': _gx, _gy = _random(-240, 240), _random(-180, 180)\n"
+                f"{pad}elif _gtgt == '_stage_': _gx, _gy = 0.0, 0.0\n"
+                f"{pad}else: _gs2 = _eng.sprites.get(_str(_gtgt)); _gx, _gy = (_gs2.x, _gs2.y) if _gs2 is not None else (sp.x, sp.y)\n"
+                f"{pad}_gs = max(0.016, {secs})\n"
+                f"{pad}_sx, _sy = sp.x, sp.y\n"
+                f"{pad}_gstart = time.time()\n"
+                f"{pad}_gmax = max(2, int(_gs * (getattr(_eng, 'target_fps', 30) or 30)) + 2)\n"
+                f"{pad}for _gi in range(_gmax):\n"
+                f"{pad}    _gel = time.time() - _gstart\n"
+                f"{pad}    _t = min(1.0, _gel / _gs)\n"
+                f"{pad}    sp.x = _sx + (_gx - _sx) * _t\n"
+                f"{pad}    sp.y = _sy + (_gy - _sy) * _t\n"
+                f"{pad}    if _eng and _eng.display: _eng.display.pen_move(sp, sp.x, sp.y)\n"
+                f"{pad}    if _t >= 1.0: break\n"
+                f"{_yield_line}"
+            )
 
         # looks
         if op == "looks_switchcostumeto":
-            _cexpr = self._expr(a.get('COSTUME'))
+            _cexpr = self._expr(a.get("COSTUME"))
             # No-op: switching to the sprite's *current* costume name is a
             # redundant O(n) scan that changes nothing (empty costume menu
             # field resolves to the current-costume self-reference below).
-            if _cexpr == "sp.costumes[sp._costume_index].get('name', '') if sp.costumes else ''":
+            if (
+                _cexpr
+                == "sp.costumes[sp._costume_index].get('name', '') if sp.costumes else ''"
+            ):
                 return ""
             return f"{pad}sp.set_costume({_cexpr})"
         if op == "looks_nextcostume":
             return f"{pad}sp.set_costume(sp._costume_index + 2)"
         if op == "looks_setsizeto":
-            _sz_node = a.get('SIZE')
-            if isinstance(_sz_node, dict) and _sz_node.get('kind') == 'const':
-                _folded = max(1.0, float(_sz_node['v']))
+            _sz_node = a.get("SIZE")
+            if isinstance(_sz_node, dict) and _sz_node.get("kind") == "const":
+                _folded = max(1.0, float(_sz_node["v"]))
                 return f"{pad}sp.size = {_folded}"
             return f"{pad}sp.size = max(1.0, {self._num_expr(_sz_node)})"
         if op == "looks_show":
@@ -3661,29 +4113,31 @@ class _PyEmitter:
             msg = a.get("MESSAGE")
             if msg is None:
                 return f"{pad}sp._say_text = ''"
-            return f"{pad}sp._say_text = _str({self._expr(msg)}); sp._say_type = \"say\""
+            return f'{pad}sp._say_text = _str({self._expr(msg)}); sp._say_type = "say"'
         if op == "looks_think":
             msg = a.get("MESSAGE")
             if msg is None:
                 return f"{pad}sp._say_text = ''"
-            return f"{pad}sp._say_text = _str({self._expr(msg)}); sp._say_type = \"think\""
+            return (
+                f'{pad}sp._say_text = _str({self._expr(msg)}); sp._say_type = "think"'
+            )
         if op == "looks_sayforsecs":
             msg = a.get("MESSAGE")
             if msg is None:
                 return f"{pad}sp._say_text = ''\n{pad}yield"
-            return f"{pad}sp._say_text = _str({self._expr(msg)}); sp._say_type = \"say\"\n{pad}yield"
+            return f'{pad}sp._say_text = _str({self._expr(msg)}); sp._say_type = "say"\n{pad}yield'
         if op == "looks_thinkforsecs":
             msg = a.get("MESSAGE")
             if msg is None:
                 return f"{pad}sp._say_text = ''\n{pad}yield"
-            return f"{pad}sp._say_text = _str({self._expr(msg)}); sp._say_type = \"think\"\n{pad}yield"
+            return f'{pad}sp._say_text = _str({self._expr(msg)}); sp._say_type = "think"\n{pad}yield'
         if op == "looks_seteffectto":
-            _eff = f['EFFECT'].lower()
-            _val = self._num_expr(a.get('VALUE'))
+            _eff = f["EFFECT"].lower()
+            _val = self._num_expr(a.get("VALUE"))
             return f"{pad}sp._effects[{_eff!r}] = max(0.0, min(100.0, {_val})) if {_eff!r} == 'ghost' else {_val}"
         if op == "looks_changeeffectby":
-            _eff = f['EFFECT'].lower()
-            _ch = self._num_expr(a.get('CHANGE'))
+            _eff = f["EFFECT"].lower()
+            _ch = self._num_expr(a.get("CHANGE"))
             return f"{pad}_e = {_eff!r}; _v = sp._effects.get(_e, 0.0) + {_ch}; sp._effects[_e] = max(0.0, min(100.0, _v)) if _e == 'ghost' else _v"
         if op == "looks_cleareffects":
             return f"{pad}for _k in sp._effects: sp._effects[_k] = 0"
@@ -3693,8 +4147,10 @@ class _PyEmitter:
             return f"{pad}if _eng.stage is not None: _eng.stage.set_costume(_eng.stage._costume_index + 2)"
         if op == "looks_switchbackdroptoandwait":
             back = self._expr(a.get("BACKDROP"))
-            return (f"{pad}if _eng and _eng.display: _eng.display.switch_backdrop({back})\n"
-                    f"{pad}yield")
+            return (
+                f"{pad}if _eng and _eng.display: _eng.display.switch_backdrop({back})\n"
+                f"{pad}yield"
+            )
         if op == "looks_gotofrontback":
             fb = self._expr(a.get("FRONT_BACK") or f.get("FRONT_BACK"))
             return f"{pad}sp.go_to_front_back({fb})"
@@ -3744,8 +4200,10 @@ class _PyEmitter:
 
         # sensing ask and wait (non-blocking overlay entry; yields until answered)
         if op == "sensing_askandwait":
-            question = self._expr(a.get('QUESTION'))
-            return f"{pad}_eng._answer = _str((yield from _eng.ask_and_wait({question})))"
+            question = self._expr(a.get("QUESTION"))
+            return (
+                f"{pad}_eng._answer = _str((yield from _eng.ask_and_wait({question})))"
+            )
 
         # data show/hide (UI operations — no-ops for now)
         if op == "data_showvariable":
@@ -3915,7 +4373,7 @@ class _PyEmitter:
         args_list = ", ".join(self._pn(a) for a in proc.get("args", []))
         proc_params = f"sp{', ' + args_list if args_list else ''}"
         lines.append(f"def _proc_{self._pn(name)}({proc_params}):")
-        prev_warp = getattr(self, '_warp', False)
+        prev_warp = getattr(self, "_warp", False)
         self._warp = proc.get("warp", False) or prev_warp
         body = self._emit_body(proc.get("body", []), 1)
         self._warp = prev_warp
@@ -3947,7 +4405,7 @@ class _PyEmitter:
             fname = f"hat_{self._pn(etype)}"
 
         # Deduplicate function names (collisions cause silent overwrites)
-        if not hasattr(self, '_hat_names'):
+        if not hasattr(self, "_hat_names"):
             self._hat_names = {}
             self._hat_order = {}
         base = fname
@@ -4002,7 +4460,7 @@ class _PyEmitter:
             else:
                 fname = f"hat_{self._pn(etype)}"
             # Use deduplicated name if one was assigned during emission
-            if hasattr(self, '_hat_order') and fname in self._hat_order:
+            if hasattr(self, "_hat_order") and fname in self._hat_order:
                 entries = self._hat_order[fname]
                 key = fname
                 fname = entries.pop(0)
@@ -4010,7 +4468,9 @@ class _PyEmitter:
                     del self._hat_order[key]
 
             ev_json = json.dumps(ev)
-            lines.append(f"    sp.hats.append({{\"event\": {ev_json}, \"body_gen\": {fname}}})")
+            lines.append(
+                f'    sp.hats.append({{"event": {ev_json}, "body_gen": {fname}}})'
+            )
 
         lines.append("    if sp.is_stage:")
         lines.append("        eng.set_stage(sp)")
@@ -4021,6 +4481,7 @@ class _PyEmitter:
 # ===================================================================
 #  SHARED MODULE GENERATORS  (_engine.py, _display.py, main.py)
 # ===================================================================
+
 
 def _generate_engine(output_dir, opts=None):
     """Generate _engine.py with Sprite, Engine, and operator helpers."""
@@ -4150,52 +4611,52 @@ def _generate_engine(output_dir, opts=None):
         "    except (OverflowError, ValueError):",
         "        return 0.0",
         "",
-"def _mathop(fn: str, x: float) -> float:",
-        '    import math',
-        '    fn = fn.lower()',
+        "def _mathop(fn: str, x: float) -> float:",
+        "    import math",
+        "    fn = fn.lower()",
         '    if fn == "pi":',
-        '        return math.pi',
+        "        return math.pi",
         '    if fn == "e":',
-        '        return math.e',
-        '    # Trig functions with exact-value correction per Scratch spec',
+        "        return math.e",
+        "    # Trig functions with exact-value correction per Scratch spec",
         '    if fn in ("sin", "cos", "tan"):',
-        '        # Normalize angle to [0, 360) for exact checks',
-        '        angle = x % 360.0',
+        "        # Normalize angle to [0, 360) for exact checks",
+        "        angle = x % 360.0",
         '        if fn == "sin":',
-        '            if angle in (0.0, 180.0): return 0.0',
-        '            if angle == 90.0: return 1.0',
-        '            if angle == 270.0: return -1.0',
+        "            if angle in (0.0, 180.0): return 0.0",
+        "            if angle == 90.0: return 1.0",
+        "            if angle == 270.0: return -1.0",
         '        elif fn == "cos":',
-        '            if angle in (90.0, 270.0): return 0.0',
-        '            if angle == 0.0: return 1.0',
-        '            if angle == 180.0: return -1.0',
+        "            if angle in (90.0, 270.0): return 0.0",
+        "            if angle == 0.0: return 1.0",
+        "            if angle == 180.0: return -1.0",
         '        elif fn == "tan":',
-        '            if angle in (0.0, 180.0): return 0.0',
+        "            if angle in (0.0, 180.0): return 0.0",
         '            if angle == 90.0: return float("inf")',
         '            if angle == 270.0: return float("-inf")',
         '        return math.sin(math.radians(x)) if fn=="sin" else math.cos(math.radians(x)) if fn=="cos" else math.tan(math.radians(x))',
-        '    trig = {\'asin\': math.asin, \'acos\': math.acos, \'atan\': math.atan}',
-        '    if fn in trig:',
-        '        try:',
-        '            val = trig[fn](x)',
-        '            if fn in (\'asin\', \'acos\', \'atan\'):',
-        '                return math.degrees(val)',
-        '            return val',
-        '        except Exception:',
-        '            # Out-of-domain (e.g. asin(2)) -> NaN, matching Scratch.',
+        "    trig = {'asin': math.asin, 'acos': math.acos, 'atan': math.atan}",
+        "    if fn in trig:",
+        "        try:",
+        "            val = trig[fn](x)",
+        "            if fn in ('asin', 'acos', 'atan'):",
+        "                return math.degrees(val)",
+        "            return val",
+        "        except Exception:",
+        "            # Out-of-domain (e.g. asin(2)) -> NaN, matching Scratch.",
         '            return float("nan")',
-        '    table = {',
+        "    table = {",
         '        "abs": abs, "floor": math.floor, "ceiling": math.ceil,',
         '        "sqrt": lambda v: math.sqrt(v) if v >= 0 else float("nan"),',
         '        "ln": lambda v: math.log(v) if v > 0 else (float("-inf") if v == 0 else float("nan")),',
         '        "log": lambda v: math.log10(v) if v > 0 else (float("-inf") if v == 0 else float("nan")),',
         '        "e ^": math.exp,',
         '        "10 ^": lambda v: 10 ** v, "round": round,',
-        '    }',
-        '    if fn in table:',
-        '        try:',
-        '            return table[fn](x)',
-        '        except Exception:',
+        "    }",
+        "    if fn in table:",
+        "        try:",
+        "            return table[fn](x)",
+        "        except Exception:",
         '            return float("nan")',
         '    return float("nan")',
         "",
@@ -4221,7 +4682,7 @@ def _generate_engine(output_dir, opts=None):
         "    def __repr__(self):",
         "        return f'_str_acc({self._parts!r})'",
         "",
-        'def _letter_of(s: Any, i: Any) -> str:',
+        "def _letter_of(s: Any, i: Any) -> str:",
         "    s, idx = _str(s), int(_num(i))",
         "    if 1 <= idx <= len(s):",
         "        return s[idx - 1]",
@@ -4271,7 +4732,7 @@ def _generate_engine(output_dir, opts=None):
         "        self.y = 0.0",
         "        self.direction = 90.0",
         "        self.size = 100.0",
-        "        self.rotation_style = \"all around\"",
+        '        self.rotation_style = "all around"',
         "        self.visible = True",
         "        self._stage: Optional[Sprite] = None",
         "        self.hats: List[Dict] = []",
@@ -4280,30 +4741,30 @@ def _generate_engine(output_dir, opts=None):
         "        self._costume_md5: str | None = None",
         "        self._ops_prev: int = 0",
         "        self._ops_prev_t: float = 0.0",
-        "        self._say_text: str = \"\"",
-        "        self._say_type: str = \"\"",
-        "        self._effects: Dict[str, float] = {\"color\": 0, \"fisheye\": 0, \"whirl\": 0, \"pixelate\": 0, \"mosaic\": 0, \"brightness\": 0, \"ghost\": 0}",
+        '        self._say_text: str = ""',
+        '        self._say_type: str = ""',
+        '        self._effects: Dict[str, float] = {"color": 0, "fisheye": 0, "whirl": 0, "pixelate": 0, "mosaic": 0, "brightness": 0, "ghost": 0}',
         "        self.pen_down: bool = False",
         "        self.pen_color = (0, 0, 0, 255)",
         "        self.pen_size = 1",
         "        self.pen_params = {'color': 0.0, 'saturation': 100.0, 'brightness': 50.0, 'transparency': 0.0}",
-"        self._px: float = 0.0",
-"        self._py: float = 0.0",
-"        self._procs: dict = {}",
-"        # cache of list-name -> {value: index} so repeated list_index_of",
-"        # calls over the same static list do not re-scan O(n) every call",
-"        self._list_index_cache: Dict[str, Dict[Any, int]] = {}",
-"        self.z_index: int = 0",
-"        self._ops: int = 0",
-"        self._ops_window: List[float] = []",
-"        self._ops_per_sec: float = 0.0",
-"        self._spawn_frame: int = 0",
-"        self._last_active_frame: int = 0",
-"        self._active: bool = False",
-"        self._clone: bool = False",
+        "        self._px: float = 0.0",
+        "        self._py: float = 0.0",
+        "        self._procs: dict = {}",
+        "        # cache of list-name -> {value: index} so repeated list_index_of",
+        "        # calls over the same static list do not re-scan O(n) every call",
+        "        self._list_index_cache: Dict[str, Dict[Any, int]] = {}",
+        "        self.z_index: int = 0",
+        "        self._ops: int = 0",
+        "        self._ops_window: List[float] = []",
+        "        self._ops_per_sec: float = 0.0",
+        "        self._spawn_frame: int = 0",
+        "        self._last_active_frame: int = 0",
+        "        self._active: bool = False",
+        "        self._clone: bool = False",
         "        self._dragging: bool = False",
         "        self._sensing_mask_cache = None",
-"        self.volume: float = 100.0",
+        "        self.volume: float = 100.0",
         "    def attach_stage(self, stage: Optional[Sprite]) -> None:",
         "        self._stage = stage",
         "",
@@ -4348,8 +4809,8 @@ def _generate_engine(output_dir, opts=None):
         "        if idx == -1:",
         "            for i, c in enumerate(self.costumes):",
         '                if c.get("name") == name_str:',
-"                    idx = i",
-"                    break",
+        "                    idx = i",
+        "                    break",
         "",
         "        if idx == -1:",
         "            try:",
@@ -4535,7 +4996,7 @@ def _generate_engine(output_dir, opts=None):
         "        self._broadcast_index: Dict[str, List] = {}",
         "        self._broadcast_dirty: bool = True",
         "        self._timer_start = time.time()",
-        '        self._key_states: Dict[str, bool] = {}',
+        "        self._key_states: Dict[str, bool] = {}",
         '        self._mouse = {"x": 0.0, "y": 0.0, "down": False}',
         "        self._display: Any = None",
         "        _disp = None",
@@ -4570,12 +5031,12 @@ def _generate_engine(output_dir, opts=None):
         '            "tasks": 0, "clones": 0, "broadcasts": 0, "paused": False,',
         "        }",
         "",
-        "    def log(self, msg: str, level: str = \"INFO\") -> None:",
-        "        \"\"\"Append a timestamped entry to the debug log ring buffer.\"\"\"",
+        '    def log(self, msg: str, level: str = "INFO") -> None:',
+        '        """Append a timestamped entry to the debug log ring buffer."""',
         "        try:",
         "            import time as _t",
         "            self._log_entries.append(",
-        "                {\"t\": _t.time(), \"frame\": self._frame, \"level\": level, \"msg\": str(msg)})",
+        '                {"t": _t.time(), "frame": self._frame, "level": level, "msg": str(msg)})',
         "        except Exception:",
         "            pass",
         "",
@@ -4601,7 +5062,7 @@ def _generate_engine(output_dir, opts=None):
         "            s.attach_stage(sp)",
         "",
         "    def create_clone_of(self, target: Any) -> None:",
-        '        name = _str(target)',
+        "        name = _str(target)",
         "        if name == '_myself_':",
         "            import inspect",
         "            frame = inspect.currentframe()",
@@ -4644,7 +5105,7 @@ def _generate_engine(output_dir, opts=None):
         '        clone._say_text = ""',
         "        clone._clone = True",
         "        clone._spawn_frame = self._frame",
-        "        self.log(f\"clone of {name!r} -> {cname!r}\", \"EVENT\")",
+        '        self.log(f"clone of {name!r} -> {cname!r}", "EVENT")',
         "        # Fire 'when I start as a clone' hat",
         "        for h in clone.hats:",
         '            if h["event"].get("type") == "control_start_as_clone":',
@@ -4659,13 +5120,13 @@ def _generate_engine(output_dir, opts=None):
         "        self._mouse = mouse",
         "",
         "    def rebuild_broadcast_index(self) -> None:",
-        "        \"\"\"Rebuild the broadcast-name -> [(sprite, hat)] dispatch index.\"\"\"",
+        '        """Rebuild the broadcast-name -> [(sprite, hat)] dispatch index."""',
         "        idx: Dict[str, List] = {}",
         "        for sp in self.sprites.values():",
         "            for h in sp.hats:",
-        "                ev = h[\"event\"]",
+        '                ev = h["event"]',
         '                if ev.get("type") == "event_whenbroadcastreceived":',
-        "                    idx.setdefault(ev.get(\"broadcast\", \"\"), []).append((sp, h))",
+        '                    idx.setdefault(ev.get("broadcast", ""), []).append((sp, h))',
         "        self._broadcast_index = idx",
         "        self._broadcast_dirty = False",
         "",
@@ -4714,17 +5175,17 @@ def _generate_engine(output_dir, opts=None):
         "",
         "    def broadcast(self, name: str) -> None:",
         "        self.stats['broadcasts'] = self.stats.get('broadcasts', 0) + 1",
-        "        self.log(f\"broadcast {name!r}\", \"EVENT\")",
+        '        self.log(f"broadcast {name!r}", "EVENT")',
         "        if DEBUG:",
-        "            print(f\"[ENGINE] broadcast {name!r}\", flush=True)",
+        '            print(f"[ENGINE] broadcast {name!r}", flush=True)',
         "        self._dispatch_broadcast(name)",
         "",
         "    def broadcast_and_wait(self, name: str):",
         "        '''Broadcast and wait for receivers to complete (via task scheduler).'''",
         "        self.stats['broadcasts'] = self.stats.get('broadcasts', 0) + 1",
-        "        self.log(f\"broadcast (and wait) {name!r}\", \"EVENT\")",
+        '        self.log(f"broadcast (and wait) {name!r}", "EVENT")',
         "        if DEBUG:",
-        "            print(f\"[ENGINE] broadcast_and_wait {name!r}\", flush=True)",
+        '            print(f"[ENGINE] broadcast_and_wait {name!r}", flush=True)',
         "        self._dispatch_broadcast(name)",
         "        if self._broadcast_dirty:",
         "            self.rebuild_broadcast_index()",
@@ -4760,7 +5221,6 @@ def _generate_engine(output_dir, opts=None):
         "                if path.exists():",
         "                    self._sounds[name] = str(path)",
         "        self._sounds_loaded = True",
-
         "    _wav_cache: Dict[str, Any] = {}  # PATCH 1: WAV decode cache",
         "",
         "    def _play_wav_adjusted(self, path: str, sync: bool, volume01: float, pitch_semitones: float) -> bool:",
@@ -4800,53 +5260,52 @@ def _generate_engine(output_dir, opts=None):
         "            return True",
         "        except Exception:",
         "            return False",
-"",
-"    def _play_wav(self, path: str, sync: bool = False, volume: float = 100.0) -> None:",
-"        _pitch = self._sound_effects.get('pitch', 0.0)  # semitones",
-"        _pan = self._sound_effects.get('pan', 0.0)      # -100..100",
-"        _vol = max(0.0, min(100.0, volume)) / 100.0",
-"        # Preferred path: real volume + pitch control (all platforms, incl. Windows).",
-"        if self._play_wav_adjusted(str(path), sync, _vol, _pitch):",
-"            return",
-"        try:",
-"            import winsound",
-"            flags = winsound.SND_FILENAME",
-"            if not sync:",
-"                flags |= winsound.SND_ASYNC",
-"            # winsound has no volume/pitch control; used only as a last resort",
-"            # after the numpy+sounddevice path above is unavailable.",
-"            winsound.PlaySound(str(path), flags)",
-"        except ImportError:",
-"            try:",
-"                import subprocess, platform",
-"                s = platform.system()",
-"                if s == 'Darwin':",
-"                    # afplay supports volume via -v (0.0 to 1.0)",
-"                    _rate = 2.0 ** (_pitch / 12.0)",
-"                    subprocess.Popen(['afplay', '-r', f'{_rate:.4f}', '-v', f'{_vol:.3f}', str(path)],",
-"                                      stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)",
-"                elif s == 'Linux':",
-"                    # play (sox) supports volume via -v",
-"                    _rate = 2.0 ** (_pitch / 12.0)",
-"                    subprocess.Popen(['play', '-q', '-V0', '-v', f'{_vol:.3f}', str(path), 'pitch', f'{_pitch:.1f}'],",
-"                                      stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)",
-"                else:",
-"                    # aplay doesn't support volume easily; play at default",
-"                    subprocess.Popen(['aplay', str(path)],",
-"                                      stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)",
-"            except Exception:",
-"                pass",
-"        except Exception:",
-"            pass",
-
-"    def play_sound(self, name: Any, volume: float = None) -> None:",
-"        path = self._sounds.get(_str(name))",
-"        if not path:",
-"            return",
-"        if volume is None:",
-"            volume = self._volume",
-"        self._play_wav(str(path), sync=False, volume=volume)",
-"",
+        "",
+        "    def _play_wav(self, path: str, sync: bool = False, volume: float = 100.0) -> None:",
+        "        _pitch = self._sound_effects.get('pitch', 0.0)  # semitones",
+        "        _pan = self._sound_effects.get('pan', 0.0)      # -100..100",
+        "        _vol = max(0.0, min(100.0, volume)) / 100.0",
+        "        # Preferred path: real volume + pitch control (all platforms, incl. Windows).",
+        "        if self._play_wav_adjusted(str(path), sync, _vol, _pitch):",
+        "            return",
+        "        try:",
+        "            import winsound",
+        "            flags = winsound.SND_FILENAME",
+        "            if not sync:",
+        "                flags |= winsound.SND_ASYNC",
+        "            # winsound has no volume/pitch control; used only as a last resort",
+        "            # after the numpy+sounddevice path above is unavailable.",
+        "            winsound.PlaySound(str(path), flags)",
+        "        except ImportError:",
+        "            try:",
+        "                import subprocess, platform",
+        "                s = platform.system()",
+        "                if s == 'Darwin':",
+        "                    # afplay supports volume via -v (0.0 to 1.0)",
+        "                    _rate = 2.0 ** (_pitch / 12.0)",
+        "                    subprocess.Popen(['afplay', '-r', f'{_rate:.4f}', '-v', f'{_vol:.3f}', str(path)],",
+        "                                      stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)",
+        "                elif s == 'Linux':",
+        "                    # play (sox) supports volume via -v",
+        "                    _rate = 2.0 ** (_pitch / 12.0)",
+        "                    subprocess.Popen(['play', '-q', '-V0', '-v', f'{_vol:.3f}', str(path), 'pitch', f'{_pitch:.1f}'],",
+        "                                      stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)",
+        "                else:",
+        "                    # aplay doesn't support volume easily; play at default",
+        "                    subprocess.Popen(['aplay', str(path)],",
+        "                                      stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)",
+        "            except Exception:",
+        "                pass",
+        "        except Exception:",
+        "            pass",
+        "    def play_sound(self, name: Any, volume: float = None) -> None:",
+        "        path = self._sounds.get(_str(name))",
+        "        if not path:",
+        "            return",
+        "        if volume is None:",
+        "            volume = self._volume",
+        "        self._play_wav(str(path), sync=False, volume=volume)",
+        "",
         "    _wav_dur_cache: Dict[str, float] = {}  # PATCH 2: WAV duration cache",
         "",
         "    def _wav_duration(self, path: str) -> float:",
@@ -4861,22 +5320,21 @@ def _generate_engine(output_dir, opts=None):
         "            except Exception:",
         "                Sprite._wav_dur_cache[_p] = 0.0",
         "        return Sprite._wav_dur_cache[_p]",
-"",
-"    def play_sound_until_done(self, name: Any, volume: float = None):",
-"        path = self._sounds.get(_str(name))",
-"        if not path:",
-"            return",
-"        if volume is None:",
-"            volume = self._volume",
-"        self._play_wav(str(path), sync=False, volume=volume)",
-"        # Block this script (but not the whole engine) until playback ends,",
-"        # matching Scratch's 'play sound until done'. Other tasks keep running",
-"        # because we cooperatively yield each frame until the duration elapses.",
-"        _dur = self._wav_duration(str(path))",
-"        _end = time.time() + _dur",
-"        while time.time() < _end:",
-"            yield",
-
+        "",
+        "    def play_sound_until_done(self, name: Any, volume: float = None):",
+        "        path = self._sounds.get(_str(name))",
+        "        if not path:",
+        "            return",
+        "        if volume is None:",
+        "            volume = self._volume",
+        "        self._play_wav(str(path), sync=False, volume=volume)",
+        "        # Block this script (but not the whole engine) until playback ends,",
+        "        # matching Scratch's 'play sound until done'. Other tasks keep running",
+        "        # because we cooperatively yield each frame until the duration elapses.",
+        "        _dur = self._wav_duration(str(path))",
+        "        _end = time.time() + _dur",
+        "        while time.time() < _end:",
+        "            yield",
         "    def stop_sounds(self) -> None:",
         "        try:",
         "            import sounddevice as _sd_stop",
@@ -4888,13 +5346,10 @@ def _generate_engine(output_dir, opts=None):
         "            winsound.PlaySound(None, winsound.SND_PURGE)",
         "        except Exception:",
         "            pass",
-
         "    def set_volume(self, v: Any) -> None:",
         "        self._volume = max(0.0, min(100.0, _num(v)))",
-
         "    def change_volume(self, v: Any) -> None:",
         "        self._volume = max(0.0, min(100.0, self._volume + _num(v)))",
-
         "    def get_volume(self) -> float:",
         "        return self._volume",
         "",
@@ -4929,10 +5384,10 @@ def _generate_engine(output_dir, opts=None):
         "            sp._last_active_frame = self._frame",
         "            sp._clone = '_[clone_' in sp.name",
         "        if green_flag:",
-        "            self.log(\"GREEN FLAG clicked\", \"CONTROL\")",
+        '            self.log("GREEN FLAG clicked", "CONTROL")',
         "        for sp in self.sprites.values():",
         "            for h in sp.hats:",
-        "                ev = h[\"event\"]",
+        '                ev = h["event"]',
         '                if green_flag and ev.get("type") == "event_whenflagclicked":',
         '                    gen = h["body_gen"](sp)',
         "                    if gen is not None:",
@@ -4944,12 +5399,12 @@ def _generate_engine(output_dir, opts=None):
         "    def run_frame(self) -> None:",
         "        self._frame += 1",
         "        if DEBUG and self._frame % 30 == 0:",
-        "            print(f\"[ENGINE] frame {self._frame} tasks={len(self._tasks)}\", flush=True)",
+        '            print(f"[ENGINE] frame {self._frame} tasks={len(self._tasks)}", flush=True)',
         "        self.stats['paused'] = self.paused",
         "        if self.paused:",
         "            self.stats['tasks'] = len(self._tasks)",
         "            self.stats['clones'] = self._clone_count",
-        "            self.stats[\"frames\"] = self._frame",
+        '            self.stats["frames"] = self._frame',
         "            return",
         "        tasks = self._tasks",
         "        self._tasks = []",
@@ -5031,7 +5486,7 @@ def _generate_engine(output_dir, opts=None):
         "            pass",
         "        self.stats['tasks'] = len(self._tasks)",
         "        self.stats['clones'] = self._clone_count",
-        "        self.stats[\"frames\"] = self._frame",
+        '        self.stats["frames"] = self._frame',
         "",
         "",
         "# ===================================================================",
@@ -5119,11 +5574,11 @@ def _generate_engine(output_dir, opts=None):
         "        if all(len(_p) == 1 for _p in _parts):",
         "            return ''.join(_parts)",
         "        return ' '.join(_parts)",
-         "    return ''",
+        "    return ''",
         "",
         "",
         "def _get_sprite_mask(sp, disp):",
-        "    \"\"\"Get (alpha_mask, nw, nh) for a sprite's current costume, cached per costume/size/direction.\"\"\"",
+        '    """Get (alpha_mask, nw, nh) for a sprite\'s current costume, cached per costume/size/direction."""',
         "    _md5 = sp._costume_md5",
         "    if not _md5:",
         "        return None",
@@ -5350,7 +5805,7 @@ def _generate_engine(output_dir, opts=None):
         "        _stage_img = _disp._last_frame if getattr(_disp, '_last_frame', None) is not None else _np.asarray(_disp.stage)",
         "        _arr = _np.asarray(_img)",
         "        _alpha = _arr[:, :, 3] > 0",
-"        if not _alpha.any():",
+        "        if not _alpha.any():",
         "            _sensing_touchingcolor._cache[_cache_key] = False",
         "            return False",
         "        _ys, _xs = _np.nonzero(_alpha)",
@@ -5396,7 +5851,7 @@ def _generate_engine(output_dir, opts=None):
         "    _sx = _disp.scale",
         "    _px = int((sp.x + _disp.stage_w / 2) * _sx - _nw / 2)",
         "    _py = int((_disp.stage_h / 2 - sp.y) * _sx - _nh / 2)",
-"    try:",
+        "    try:",
         "        import numpy as _np",
         "        _stage_img = _disp._last_frame if getattr(_disp, '_last_frame', None) is not None else _np.asarray(_disp.stage)",
         "        _arr = _np.asarray(_img)",
@@ -5489,9 +5944,9 @@ def _generate_engine(output_dir, opts=None):
         "def _display_setcolor(sp, cv: Any):",
         "    if not sp: return",
         "    val = _str(cv).strip()",
-        "    if val.startswith(\"#\"):",
+        '    if val.startswith("#"):',
         "        try:",
-        "            h = val.lstrip(\"#\")",
+        '            h = val.lstrip("#")',
         "            if len(h) == 6:",
         "                r, g, b = int(h[0:2], 16), int(h[2:4], 16), int(h[4:6], 16)",
         "                sp.pen_color = (r, g, b, 255)",
@@ -5965,7 +6420,7 @@ def _generate_display(output_dir, opts=None):
         "class Display:",
         '    """Manages a window that renders the Scratch stage and draws pen output."""',
         "",
-        f"    def __init__(self, title=\"Scratch\", stage_size=({stage_w}, {stage_h}), scale={scale},",
+        f'    def __init__(self, title="Scratch", stage_size=({stage_w}, {stage_h}), scale={scale},',
         "                 assets_dir=None):",
         "        self.stage_w, self.stage_h = stage_size",
         "        self.scale = scale",
@@ -5977,7 +6432,7 @@ def _generate_display(output_dir, opts=None):
         '        self.root.protocol("WM_DELETE_WINDOW", self._on_close)',
         "        self.running = True",
         "        self.eng = None  # set by main.py to the owning Engine (click dispatch)",
-        "        self.root.geometry(f\"{self.win_w}x{self.win_h}\")",
+        '        self.root.geometry(f"{self.win_w}x{self.win_h}")',
         "        self.root.resizable(False, False)",
         "",
         "        self.canvas = tk.Canvas(self.root, width=self.win_w, height=self.win_h,",
@@ -5990,7 +6445,6 @@ def _generate_display(output_dir, opts=None):
         "        self._image_item = None",
         "        self._stats_item = None",
         "",
-
         "        # backdrop cache: avoid recompositing when stage+pen unchanged",
         "        self._backdrop_cache_key = None",
         "        self._backdrop_cache_img = None",
@@ -6043,26 +6497,26 @@ def _generate_display(output_dir, opts=None):
         "",
         "    def _on_mouse_move(self, e):",
         '        self.mouse_state["x"], self.mouse_state["y"] = self._scratch_xy(e.x, e.y)',
-"        if getattr(self, \"_drag_target\", None) is not None:",
-"            # Update target coordinates directly to match mouse pointer",
-"            self._drag_target.x = self.mouse_state[\"x\"]",
-"            self._drag_target.y = self.mouse_state[\"y\"]",
-"        ",
-"    def _on_mouse_down(self, e):",
+        '        if getattr(self, "_drag_target", None) is not None:',
+        "            # Update target coordinates directly to match mouse pointer",
+        '            self._drag_target.x = self.mouse_state["x"]',
+        '            self._drag_target.y = self.mouse_state["y"]',
+        "        ",
+        "    def _on_mouse_down(self, e):",
         '        self.mouse_state["down"] = True',
         "        if self.eng is not None:",
         "            _hit = self._hit_test_sprite(e.x, e.y)",
         "            if _hit is not None:",
-        "                if getattr(_hit, \"is_draggable\", False) or getattr(_hit, \"_dragging\", False):",
+        '                if getattr(_hit, "is_draggable", False) or getattr(_hit, "_dragging", False):',
         "                    _hit._dragging = True",
         "                    self._drag_target = _hit",
-        "                self.eng._fire_event(\"event_whenthisspriteclicked\", _hit)",
+        '                self.eng._fire_event("event_whenthisspriteclicked", _hit)',
         "            else:",
-        "                self.eng._fire_event(\"event_whenstageclicked\")",
+        '                self.eng._fire_event("event_whenstageclicked")',
         "",
         "    def _on_mouse_up(self, e):",
         '        self.mouse_state["down"] = False',
-        "        _dt = getattr(self, \"_drag_target\", None)",
+        '        _dt = getattr(self, "_drag_target", None)',
         "        if _dt is not None:",
         "            _dt._dragging = False",
         "            self._drag_target = None",
@@ -6082,8 +6536,8 @@ def _generate_display(output_dir, opts=None):
         "                _md5 = getattr(_sp, '_costume_md5', None)",
         "                if not _md5:",
         "                    continue",
-         "                _img = self.load_costume(_md5, getattr(_sp, 'name', None))",
-         "                if _img is None:",
+        "                _img = self.load_costume(_md5, getattr(_sp, 'name', None))",
+        "                if _img is None:",
         "                    continue",
         "                _s = max(0.0, getattr(_sp, 'size', 100.0)) / 100.0",
         "                _nw = max(1, int(_img.size[0] * _s))",
@@ -6140,9 +6594,9 @@ def _generate_display(output_dir, opts=None):
         "",
         "    def ask_async(self, question: str):",
         '        """Non-blocking ask: show an input box at the bottom of the stage.',
-        '        Returns a generator that yields until Enter is pressed, then',
-        '        yields the final answer string. The mainloop keeps running.',
-        '        Concurrent asks are serialized via a FIFO queue so they never',
+        "        Returns a generator that yields until Enter is pressed, then",
+        "        yields the final answer string. The mainloop keeps running.",
+        "        Concurrent asks are serialized via a FIFO queue so they never",
         '        overwrite the shared input widget used by another sprite."""',
         "        _tok = object()",
         "        self._ask_waiters.append(_tok)",
@@ -6209,9 +6663,9 @@ def _generate_display(output_dir, opts=None):
         "            path = self._file_index.get((sprite_name, md5ext))",
         "        if path is None:",
         "            for (_sn, _fn), _p in self._file_index.items():",
-"                if _fn == md5ext and _sn != sprite_name:",
-"                    path = _p",
-"                    break",
+        "                if _fn == md5ext and _sn != sprite_name:",
+        "                    path = _p",
+        "                    break",
         "        if path is None:",
         "            _fb = self._assets_dir / md5ext",
         "            if _fb.exists():",
@@ -6462,8 +6916,8 @@ def _generate_display(output_dir, opts=None):
         "        py1 = int((self.stage_h / 2 - y1) * sy)",
         "        px2 = int((x2 + self.stage_w / 2) * sx)",
         "        py2 = int((self.stage_h / 2 - y2) * sy)",
-        "        color = getattr(sp, \"pen_color\", (0, 0, 0, 255))",
-        "        size = getattr(sp, \"pen_size\", 1)",
+        '        color = getattr(sp, "pen_color", (0, 0, 0, 255))',
+        '        size = getattr(sp, "pen_size", 1)',
         "        color = self._norm_pen_color(color)",
         "        w = max(1, int(size * sx))",
         "        draw.line([(px1, py1), (px2, py2)], fill=color, width=w, joint='curve')",
@@ -6491,7 +6945,7 @@ def _generate_display(output_dir, opts=None):
         "",
         "    @staticmethod",
         "    def _norm_pen_color(color):",
-        "        \"\"\"Coerce a pen color to a clamped int RGBA tuple.\"\"\"",
+        '        """Coerce a pen color to a clamped int RGBA tuple."""',
         "        if color is None:",
         "            return (0, 0, 0, 255)",
         "        try:",
@@ -6504,8 +6958,8 @@ def _generate_display(output_dir, opts=None):
         "        return tuple(max(0, min(255, int(round(v)))) for v in c)",
         "",
         "    def pen_move(self, sp, nx: float, ny: float):",
-        "        \"\"\"Draw a line from the sprite's last pen position to (nx, ny)\"\"\"",
-        "        \"\"\"when the pen is down (Scratch pen semantics).\"\"\"",
+        '        """Draw a line from the sprite\'s last pen position to (nx, ny)"""',
+        '        """when the pen is down (Scratch pen semantics)."""',
         "        if sp is not None and getattr(sp, 'pen_down', False):",
         "            try:",
         "                if sp._px == nx and sp._py == ny:",
@@ -6610,8 +7064,8 @@ def _generate_display(output_dir, opts=None):
         "                        break",
         "                self._composite_array(_arr, self.pen_layer)",
         "                use_numpy = True",
-"            else:",
-"                for sp in _sprites:",
+        "            else:",
+        "                for sp in _sprites:",
         "                    if sp.is_stage:",
         '                        md5 = getattr(sp, "_costume_md5", None)',
         "                        if md5:",
@@ -6633,9 +7087,9 @@ def _generate_display(output_dir, opts=None):
         "                continue",
         '            md5 = getattr(sp, "_costume_md5", None)',
         "            if not md5:",
-         "                continue",
-         "            img = self.load_costume(md5, getattr(sp, 'name', None))",
-         "            if img is None:",
+        "                continue",
+        "            img = self.load_costume(md5, getattr(sp, 'name', None))",
+        "            if img is None:",
         "                continue",
         "            s = max(0.0, sp.size) / 100.0",
         "            w2, h2 = img.size",
@@ -6666,27 +7120,27 @@ def _generate_display(output_dir, opts=None):
         "                _dir = getattr(sp, 'direction', 90.0)",
         "                _flipped = False",
         "                _rotated = False",
-"                if _rs == 'all around' and _dir != 90.0:",
-"                    # PIL's expand=True ignores center=; we must rotate on a centered canvas.",
-"                    # First, create a canvas large enough to hold the rotated image.",
-"                    _w, _h = img.size",
-"                    _angle = 90.0 - _dir",
-"                    _radians = math.radians(_angle)",
-"                    _cos = abs(math.cos(_radians))",
-"                    _sin = abs(math.sin(_radians))",
-"                    _nw = int(_w * _cos + _h * _sin) + 1",
-"                    _nh = int(_w * _sin + _h * _cos) + 1",
-"                    # Create padded canvas with the image centered on its rotation center.",
-"                    _canvas = Image.new('RGBA', (_nw, _nh), (0, 0, 0, 0))",
-"                    _cx = (_nw // 2 - int(_rcx))",
-"                    _cy = (_nh // 2 - int(_rcy))",
-"                    _canvas.paste(img, (_cx, _cy), img)",
-"                    # Rotate around the canvas center (which aligns with the rotation center).",
-"                    _rimg = _canvas.rotate(_angle, expand=False, resample=_PIL_ROTRES,",
-"                                          center=(_nw / 2.0, _nh / 2.0))",
-"                    # Adjust paste position to account for canvas centering.",
-"                    px = int((sp.x + self.stage_w / 2) * sx) - _nw // 2",
- "                    py = int((self.stage_h / 2 - sp.y) * sy) - _nh // 2",
+        "                if _rs == 'all around' and _dir != 90.0:",
+        "                    # PIL's expand=True ignores center=; we must rotate on a centered canvas.",
+        "                    # First, create a canvas large enough to hold the rotated image.",
+        "                    _w, _h = img.size",
+        "                    _angle = 90.0 - _dir",
+        "                    _radians = math.radians(_angle)",
+        "                    _cos = abs(math.cos(_radians))",
+        "                    _sin = abs(math.sin(_radians))",
+        "                    _nw = int(_w * _cos + _h * _sin) + 1",
+        "                    _nh = int(_w * _sin + _h * _cos) + 1",
+        "                    # Create padded canvas with the image centered on its rotation center.",
+        "                    _canvas = Image.new('RGBA', (_nw, _nh), (0, 0, 0, 0))",
+        "                    _cx = (_nw // 2 - int(_rcx))",
+        "                    _cy = (_nh // 2 - int(_rcy))",
+        "                    _canvas.paste(img, (_cx, _cy), img)",
+        "                    # Rotate around the canvas center (which aligns with the rotation center).",
+        "                    _rimg = _canvas.rotate(_angle, expand=False, resample=_PIL_ROTRES,",
+        "                                          center=(_nw / 2.0, _nh / 2.0))",
+        "                    # Adjust paste position to account for canvas centering.",
+        "                    px = int((sp.x + self.stage_w / 2) * sx) - _nw // 2",
+        "                    py = int((self.stage_h / 2 - sp.y) * sy) - _nh // 2",
         "                    _rotated = True",
         "                elif _rs == 'left-right':",
         "                    _ndir = _dir % 360.0",
@@ -6726,22 +7180,22 @@ def _generate_display(output_dir, opts=None):
         "        except Exception:",
         "            self._last_frame = None",
         "        if self._image_item is None:",
-        '            self._image_item = self.canvas.create_image(',
+        "            self._image_item = self.canvas.create_image(",
         '                0, 0, anchor="nw", image=self._photo)',
         "        else:",
         "            self.canvas.itemconfig(self._image_item, image=self._photo)",
         "",
-        "        fps = stats.get(\"fps\", 0)",
-        "        ft = stats.get(\"frame_time\", 0) * 1000",
-        "        opf = stats.get(\"ops\", 0)",
-        "        op_sec = stats.get(\"ops_per_sec\", 0)",
-        "        frame_n = stats.get(\"frames\", 0)",
-        "        text = (f\"FPS:{fps:.0f}  Frame:{frame_n}  \"",
-        "                f\"Ops:{opf}  Ops/s:{op_sec:.0f}  \"",
-        "                f\"{ft:.1f}ms\")",
+        '        fps = stats.get("fps", 0)',
+        '        ft = stats.get("frame_time", 0) * 1000',
+        '        opf = stats.get("ops", 0)',
+        '        op_sec = stats.get("ops_per_sec", 0)',
+        '        frame_n = stats.get("frames", 0)',
+        '        text = (f"FPS:{fps:.0f}  Frame:{frame_n}  "',
+        '                f"Ops:{opf}  Ops/s:{op_sec:.0f}  "',
+        '                f"{ft:.1f}ms")',
         "        if self._stats_item is None:",
-        '            self._stats_item = self.canvas.create_text(',
-        '                8, self.stage_h * self.scale + 8,',
+        "            self._stats_item = self.canvas.create_text(",
+        "                8, self.stage_h * self.scale + 8,",
         '                text=text, anchor="nw",',
         '                fill="#0f0", font=("Consolas", 10))',
         "        else:",
@@ -7920,7 +8374,11 @@ def _py_repr(obj):
     """Serialize a JSON-like value as valid Python source (None/True/False
     instead of JSON's null/true/false)."""
     if isinstance(obj, dict):
-        return "{" + ", ".join(f"{_py_repr(k)}: {_py_repr(v)}" for k, v in obj.items()) + "}"
+        return (
+            "{"
+            + ", ".join(f"{_py_repr(k)}: {_py_repr(v)}" for k, v in obj.items())
+            + "}"
+        )
     if isinstance(obj, (list, tuple)):
         return "[" + ", ".join(_py_repr(v) for v in obj) + "]"
     if obj is None:
@@ -7981,26 +8439,38 @@ def _generate_main(ir_data, output_dir, generated, opts=None):
         "def _parse_args():",
         '    """Parse CLI flags for runtime configuration."""',
         "    parser = argparse.ArgumentParser(description='Run decompiled Scratch project')",
-        "    parser.add_argument('--debug', action='store_true', default=" + repr(debug) + ",",
+        "    parser.add_argument('--debug', action='store_true', default="
+        + repr(debug)
+        + ",",
         "                        help='Enable debug logging')",
         "    parser.add_argument('--no-debug', action='store_false', dest='debug',",
         "                        help='Disable debug logging')",
-        "    parser.add_argument('--fps', type=float, default=" + repr(target_fps) + ",",
-        "                        dest='target_fps', help='Target frames per second (default: " + str(target_fps) + ")')",
+        "    parser.add_argument('--fps', type=float, default="
+        + repr(target_fps)
+        + ",",
+        "                        dest='target_fps', help='Target frames per second (default: "
+        + str(target_fps)
+        + ")')",
         "    parser.add_argument('--scale', type=int, default=" + repr(scale) + ",",
-        "                        help='Display scale factor (default: " + str(scale) + ")')",
+        "                        help='Display scale factor (default: "
+        + str(scale)
+        + ")')",
         "    parser.add_argument('--stage-w', type=int, default=" + repr(stage_w) + ",",
-        "                        dest='stage_w', help='Stage width in Scratch units (default: " + str(stage_w) + ")')",
+        "                        dest='stage_w', help='Stage width in Scratch units (default: "
+        + str(stage_w)
+        + ")')",
         "    parser.add_argument('--stage-h', type=int, default=" + repr(stage_h) + ",",
-        "                        dest='stage_h', help='Stage height in Scratch units (default: " + str(stage_h) + ")')",
+        "                        dest='stage_h', help='Stage height in Scratch units (default: "
+        + str(stage_h)
+        + ")')",
         "    return parser.parse_args()",
         "",
         "",
         "def main():",
         '    """Load decompiled modules and run the game."""',
         "    _args = _parse_args()",
-        '    _basedir = Path(__file__).resolve().parent',
-        '    assets_dir = _basedir.resolve()',
+        "    _basedir = Path(__file__).resolve().parent",
+        "    assets_dir = _basedir.resolve()",
         "",
         "    # create engine and display",
         "    eng = Engine()",
@@ -8019,7 +8489,9 @@ def _generate_main(ir_data, output_dir, generated, opts=None):
     if items:
         lines.append(f"    reg0 = importlib.import_module({items[0][1]!r}).register")
         lines.append("    reg0(eng)")
-        lines.append("    disp.root.update_idletasks()  # first paint before remaining imports")
+        lines.append(
+            "    disp.root.update_idletasks()  # first paint before remaining imports"
+        )
     for i, (name, mod) in enumerate(items[1:], 1):
         lines.append(f"    reg{i} = importlib.import_module({mod!r}).register")
         lines.append(f"    reg{i}(eng)")
@@ -8054,84 +8526,84 @@ def _generate_main(ir_data, output_dir, generated, opts=None):
         "            _dbg = DebugPanel(eng, disp)",
         "            # Position debug panel to the right of the main window (deferred)",
         "            def _place_debug_panel():",
-            "                try:",
-            "                    _dbg.win.update_idletasks()",
-            "                    _pw = _dbg.win.winfo_reqwidth() or 900",
-            "                    _ph = _dbg.win.winfo_reqheight() or 700",
-            "                    _sw = _dbg.win.winfo_screenwidth()",
-            "                    _sh = _dbg.win.winfo_screenheight()",
-            "                    _rx = disp.root.winfo_rootx()",
-            "                    _ry = disp.root.winfo_rooty()",
-            "                    _rw = disp.root.winfo_width()",
-            "                    _rh = disp.root.winfo_height()",
-            "                    # Try right of main window first",
-            "                    _px = _rx + _rw + 10",
-            "                    _py = _ry",
-            "                    # If panel extends past right screen edge, try left",
-            "                    if _px + _pw > _sw:",
-            "                        _px = max(0, _rx - _pw - 10)",
-            "                    # If past bottom, clamp to screen",
-            "                    if _py + _ph > _sh:",
-            "                        _py = max(0, _sh - _ph)",
-            "                    # If main is too wide (panel would overlap), place below",
-            "                    if _px < _rx + _rw and _px + _pw > _rx:",
-            "                        _px = _rx",
-            "                        _py = _ry + _rh + 10",
-            "                        if _py + _ph > _sh:",
-            "                            _py = max(0, _ry - _ph - 10)",
-            "                    _dbg.win.geometry(f'+{_px}+{_py}')",
-            "                    _dbg.win.attributes('-topmost', False)",
-            "                    disp.root.lift()",
-            "                    disp.root.focus_force()",
-            "                except Exception:",
-            "                    pass",
+        "                try:",
+        "                    _dbg.win.update_idletasks()",
+        "                    _pw = _dbg.win.winfo_reqwidth() or 900",
+        "                    _ph = _dbg.win.winfo_reqheight() or 700",
+        "                    _sw = _dbg.win.winfo_screenwidth()",
+        "                    _sh = _dbg.win.winfo_screenheight()",
+        "                    _rx = disp.root.winfo_rootx()",
+        "                    _ry = disp.root.winfo_rooty()",
+        "                    _rw = disp.root.winfo_width()",
+        "                    _rh = disp.root.winfo_height()",
+        "                    # Try right of main window first",
+        "                    _px = _rx + _rw + 10",
+        "                    _py = _ry",
+        "                    # If panel extends past right screen edge, try left",
+        "                    if _px + _pw > _sw:",
+        "                        _px = max(0, _rx - _pw - 10)",
+        "                    # If past bottom, clamp to screen",
+        "                    if _py + _ph > _sh:",
+        "                        _py = max(0, _sh - _ph)",
+        "                    # If main is too wide (panel would overlap), place below",
+        "                    if _px < _rx + _rw and _px + _pw > _rx:",
+        "                        _px = _rx",
+        "                        _py = _ry + _rh + 10",
+        "                        if _py + _ph > _sh:",
+        "                            _py = max(0, _ry - _ph - 10)",
+        "                    _dbg.win.geometry(f'+{_px}+{_py}')",
+        "                    _dbg.win.attributes('-topmost', False)",
+        "                    disp.root.lift()",
+        "                    disp.root.focus_force()",
+        "                except Exception:",
+        "                    pass",
         "            disp.root.after(200, _place_debug_panel)",
         "        except Exception as _e:",
         "            if _args.debug:",
         "                import traceback; traceback.print_exc()",
-         "",
-    "    # On Windows, raise the system timer resolution to 1ms so Tk's",
-    "    # after()/perf_counter pacing isn't quantised to the default ~15.6ms",
-    "    # tick, which otherwise causes visible frame jitter.",
-    "    _timer_hi = False",
-    "    try:",
-    "        import ctypes, sys as _sys",
-    "        if _sys.platform == 'win32':",
-    "            ctypes.windll.winmm.timeBeginPeriod(1)",
-    "            _timer_hi = True",
-    "            import atexit as _atexit",
-    "            def _release_timer():",
-    "                try: ctypes.windll.winmm.timeEndPeriod(1)",
-    "                except Exception: pass",
-    "            _atexit.register(_release_timer)",
-    "    except Exception:",
-    "        _timer_hi = False",
-         "",
-         "    # game loop (phase-locked to a fixed schedule). We poll at high",
-         "    # resolution and only run a frame once perf_counter reaches the next",
-         "    # scheduled time, decoupling frame pacing from Tk's coarse timer.",
-         "    _loop_start = time.perf_counter()",
-         "    _next_t = _loop_start",
-         "    def tick():",
-         "        nonlocal _next_t",
-         "        try:",
-         "            if not disp.running:",
-         "                if _timer_hi:",
-         "                    try:",
-         "                        ctypes.windll.winmm.timeEndPeriod(1)",
-         "                    except Exception:",
-         "                        pass",
-         "                return",
-         "            # Not time for the next frame yet: re-poll very soon.",
-         "            _now0 = time.perf_counter()",
-         "            if _now0 < _next_t:",
-         "                _sleep = _next_t - _now0",
-         "                if _sleep > 0.003:",
-         "                    disp.root.after(int((_sleep - 0.002) * 1000), tick)",
-         "                else:",
-         "                    disp.root.after(1, tick)",
-         "                return",
-         "            t_start = time.perf_counter()",
+        "",
+        "    # On Windows, raise the system timer resolution to 1ms so Tk's",
+        "    # after()/perf_counter pacing isn't quantised to the default ~15.6ms",
+        "    # tick, which otherwise causes visible frame jitter.",
+        "    _timer_hi = False",
+        "    try:",
+        "        import ctypes, sys as _sys",
+        "        if _sys.platform == 'win32':",
+        "            ctypes.windll.winmm.timeBeginPeriod(1)",
+        "            _timer_hi = True",
+        "            import atexit as _atexit",
+        "            def _release_timer():",
+        "                try: ctypes.windll.winmm.timeEndPeriod(1)",
+        "                except Exception: pass",
+        "            _atexit.register(_release_timer)",
+        "    except Exception:",
+        "        _timer_hi = False",
+        "",
+        "    # game loop (phase-locked to a fixed schedule). We poll at high",
+        "    # resolution and only run a frame once perf_counter reaches the next",
+        "    # scheduled time, decoupling frame pacing from Tk's coarse timer.",
+        "    _loop_start = time.perf_counter()",
+        "    _next_t = _loop_start",
+        "    def tick():",
+        "        nonlocal _next_t",
+        "        try:",
+        "            if not disp.running:",
+        "                if _timer_hi:",
+        "                    try:",
+        "                        ctypes.windll.winmm.timeEndPeriod(1)",
+        "                    except Exception:",
+        "                        pass",
+        "                return",
+        "            # Not time for the next frame yet: re-poll very soon.",
+        "            _now0 = time.perf_counter()",
+        "            if _now0 < _next_t:",
+        "                _sleep = _next_t - _now0",
+        "                if _sleep > 0.003:",
+        "                    disp.root.after(int((_sleep - 0.002) * 1000), tick)",
+        "                else:",
+        "                    disp.root.after(1, tick)",
+        "                return",
+        "            t_start = time.perf_counter()",
         "            eng.set_input(disp.key_state, disp.mouse_state)",
         "            eng.run_frame()",
         "            t_logic = time.perf_counter()",
@@ -8139,38 +8611,38 @@ def _generate_main(ir_data, output_dir, generated, opts=None):
         "            t_render = time.perf_counter()",
         "            elapsed = t_render - t_start",
         "            actual_dt = t_start - _next_t + (1.0 / eng.target_fps)",
-        "            eng.stats[\"frame_time\"] = elapsed",
-        "            eng.stats[\"logic_time\"] = t_logic - t_start",
-        "            eng.stats[\"render_time\"] = t_render - t_logic",
+        '            eng.stats["frame_time"] = elapsed',
+        '            eng.stats["logic_time"] = t_logic - t_start',
+        '            eng.stats["render_time"] = t_render - t_logic',
         "            _inst_fps = 1.0 / max(0.001, actual_dt) if actual_dt > 0 else 0",
-            "            eng.stats[\"fps\"] = eng.stats.get(\"fps\", _inst_fps) * 0.7 + _inst_fps * 0.3",
+        '            eng.stats["fps"] = eng.stats.get("fps", _inst_fps) * 0.7 + _inst_fps * 0.3',
         "            if eng._frame % 30 == 0:",
         "                dt = time.perf_counter() - _loop_start",
         "                if dt > 0:",
-         "                    eng.stats[\"ops_per_sec\"] = eng.stats[\"ops\"] / dt",
-         "                if _args.debug:",
-         "                    print(f\"[MAIN] frame {eng._frame} fps={eng.stats['fps']:.1f} ops={eng.stats['ops']}\", flush=True)",
+        '                    eng.stats["ops_per_sec"] = eng.stats["ops"] / dt',
+        "                if _args.debug:",
+        "                    print(f\"[MAIN] frame {eng._frame} fps={eng.stats['fps']:.1f} ops={eng.stats['ops']}\", flush=True)",
         "            if not eng.running:",
         "                disp.running = False",
         "                return",
-         "            target_dt = 1.0 / eng.target_fps",
-         "            _next_t += target_dt",
-         "            now = time.perf_counter()",
-         "            if _next_t < now:",
-         "                # Fell behind: resync and count the dropped frame.",
-         "                eng.stats['dropped_frames'] = eng.stats.get('dropped_frames', 0) + 1",
-         "                _next_t = now + target_dt",
-         "            # Re-poll: sleep most of the remaining time via Tk, then let",
-         "            # the poll branch above fine-tune with 1ms wakeups.",
-         "            _rem = _next_t - now",
-         "            if _rem > 0.003:",
-         "                disp.root.after(int((_rem - 0.002) * 1000), tick)",
-         "            else:",
-         "                disp.root.after(1, tick)",
-         "        except Exception as _e:",
-         "            import traceback",
-         "            traceback.print_exc()",
-         "            disp.running = False",
+        "            target_dt = 1.0 / eng.target_fps",
+        "            _next_t += target_dt",
+        "            now = time.perf_counter()",
+        "            if _next_t < now:",
+        "                # Fell behind: resync and count the dropped frame.",
+        "                eng.stats['dropped_frames'] = eng.stats.get('dropped_frames', 0) + 1",
+        "                _next_t = now + target_dt",
+        "            # Re-poll: sleep most of the remaining time via Tk, then let",
+        "            # the poll branch above fine-tune with 1ms wakeups.",
+        "            _rem = _next_t - now",
+        "            if _rem > 0.003:",
+        "                disp.root.after(int((_rem - 0.002) * 1000), tick)",
+        "            else:",
+        "                disp.root.after(1, tick)",
+        "        except Exception as _e:",
+        "            import traceback",
+        "            traceback.print_exc()",
+        "            disp.running = False",
         "",
         "    eng.running = True",
         "    disp.root.after(0, tick)",
@@ -8184,12 +8656,20 @@ def _generate_main(ir_data, output_dir, generated, opts=None):
     # Write asset data to a separate JSON file (avoids recompiling a huge
     # inline dict literal every launch).
     import json as _json_mod
+
     asset_path = output_dir / "_asset_data.json"
-    asset_path.write_text(_json_mod.dumps({
-        "costumes": _costume_data,
-        "sounds": _sound_data,
-        "z_order": _z_order,
-    }, ensure_ascii=False, separators=(',', ':')), encoding="utf-8")
+    asset_path.write_text(
+        _json_mod.dumps(
+            {
+                "costumes": _costume_data,
+                "sounds": _sound_data,
+                "z_order": _z_order,
+            },
+            ensure_ascii=False,
+            separators=(",", ":"),
+        ),
+        encoding="utf-8",
+    )
     log.info("emitted _asset_data.json")
     out_path = output_dir / "main.py"
     out_path.write_text("\n".join(lines), encoding="utf-8")
@@ -8244,7 +8724,7 @@ def _validate_crossrefs(output_dir, ir_data):
     all_broadcasts = set()
     all_procs = {}  # proc_name -> target_name
     all_lists = {}  # (target_name, list_name) -> True
-    all_vars = {}   # (target_name, var_name) -> True
+    all_vars = {}  # (target_name, var_name) -> True
 
     for t in ir_data.get("targets", []):
         tname = t.get("name", "")
@@ -8262,18 +8742,24 @@ def _validate_crossrefs(output_dir, ir_data):
         src = py_file.read_text(encoding="utf-8")
         # Parse the AST to get actual string values (handles \u escapes)
         import ast
+
         try:
             tree = ast.parse(src)
         except SyntaxError as e:
-            errors.append((str(py_file.relative_to(output_dir)),
-                           f"SyntaxError: {e}"))
+            errors.append((str(py_file.relative_to(output_dir)), f"SyntaxError: {e}"))
             continue
         call_proc_strings = []
         for node in ast.walk(tree):
-            if (isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute)
-                    and node.func.attr == "call_proc" and node.args):
+            if (
+                isinstance(node, ast.Call)
+                and isinstance(node.func, ast.Attribute)
+                and node.func.attr == "call_proc"
+                and node.args
+            ):
                 first_arg = node.args[0]
-                if isinstance(first_arg, ast.Constant) and isinstance(first_arg.value, str):
+                if isinstance(first_arg, ast.Constant) and isinstance(
+                    first_arg.value, str
+                ):
                     call_proc_strings.append(first_arg.value)
 
         # Check procedure calls: sp.call_proc('name', ...)
@@ -8282,8 +8768,12 @@ def _validate_crossrefs(output_dir, ir_data):
             if pname.startswith("//") or "\u200b" in pname:
                 continue
             if pname not in all_procs:
-                errors.append((str(py_file.relative_to(output_dir)),
-                               f"Calls unknown procedure {pname!r}"))
+                errors.append(
+                    (
+                        str(py_file.relative_to(output_dir)),
+                        f"Calls unknown procedure {pname!r}",
+                    )
+                )
         # NOTE: broadcast/list/variable crossref validation is intentionally
         # deferred — these require target-scoped resolution that is not
         # available at this point in the pipeline.
@@ -8301,13 +8791,21 @@ def _validate_assets(output_dir, ir_data):
         for c in t.get("costumes", []):
             md5 = c.get("md5ext", "")
             if md5 and not (tdir / md5).exists():
-                errors.append((f"data/{tname}/{md5}",
-                               f"Missing asset for costume {c.get('name')!r}"))
+                errors.append(
+                    (
+                        f"data/{tname}/{md5}",
+                        f"Missing asset for costume {c.get('name')!r}",
+                    )
+                )
         for s in t.get("sounds", []):
             md5 = s.get("md5ext", "")
             if md5 and not (tdir / md5).exists():
-                errors.append((f"data/{tname}/{md5}",
-                               f"Missing asset for sound {s.get('name')!r}"))
+                errors.append(
+                    (
+                        f"data/{tname}/{md5}",
+                        f"Missing asset for sound {s.get('name')!r}",
+                    )
+                )
     return errors
 
 
@@ -8317,11 +8815,13 @@ def _validate_runtime(output_dir, ir_data):
     import sys
     import importlib
     import os
+
     old_cwd = os.getcwd()
     os.chdir(output_dir)
     sys.path.insert(0, ".")
     try:
         from _engine import Engine
+
         eng = Engine()
         # register all targets
         for idx, t in enumerate(ir_data.get("targets", [])):
@@ -8343,9 +8843,31 @@ def _validate_runtime(output_dir, ir_data):
         os.chdir(old_cwd)
         # clean up sys.modules entries we added
         for k in list(sys.modules.keys()):
-            if k.startswith(("00_", "01_", "02_", "03_", "04_", "05_", "06_",
-                             "07_", "08_", "09_", "10_", "11_", "12_", "13_",
-                             "14_", "15_", "16_", "17_", "18_", "19_", "20_")):
+            if k.startswith(
+                (
+                    "00_",
+                    "01_",
+                    "02_",
+                    "03_",
+                    "04_",
+                    "05_",
+                    "06_",
+                    "07_",
+                    "08_",
+                    "09_",
+                    "10_",
+                    "11_",
+                    "12_",
+                    "13_",
+                    "14_",
+                    "15_",
+                    "16_",
+                    "17_",
+                    "18_",
+                    "19_",
+                    "20_",
+                )
+            ):
                 sys.modules.pop(k, None)
     return errors
 
@@ -8354,29 +8876,55 @@ def _validate_runtime(output_dir, ir_data):
 #  CLI
 # ===================================================================
 
+
 def main():
     parser = argparse.ArgumentParser(
         description="Decompile a Scratch SB3 project.json into Python modules.",
     )
     parser.add_argument("project", help="Path to project.json or .sb3 file")
-    parser.add_argument("subcommand", nargs="?", default="all",
-                        choices=["extract", "parse", "emit", "all"],
-                        help="Pipeline step (default: all)")
-    parser.add_argument("-o", "--output", default=None,
-                        help="Output path (dir for extract/emit/all, file for parse)")
+    parser.add_argument(
+        "subcommand",
+        nargs="?",
+        default="all",
+        choices=["extract", "parse", "emit", "all"],
+        help="Pipeline step (default: all)",
+    )
+    parser.add_argument(
+        "-o",
+        "--output",
+        default=None,
+        help="Output path (dir for extract/emit/all, file for parse)",
+    )
     parser.add_argument("-v", "--verbose", action="store_true", help="Verbose logging")
-    parser.add_argument("--target-fps", type=float, default=60.0,
-                        help="Target frames per second (default: 60)")
-    parser.add_argument("--scale", type=int, default=2,
-                        help="Display scale factor (default: 2)")
-    parser.add_argument("--stage-w", type=int, default=480,
-                        help="Stage width in Scratch units (default: 480)")
-    parser.add_argument("--stage-h", type=int, default=360,
-                        help="Stage height in Scratch units (default: 360)")
-    parser.add_argument("--debug", action="store_true",
-                        help="Emit debug logging into generated modules")
-    parser.add_argument("--force", action="store_true",
-                        help="Overwrite the output directory if it already exists")
+    parser.add_argument(
+        "--target-fps",
+        type=float,
+        default=60.0,
+        help="Target frames per second (default: 60)",
+    )
+    parser.add_argument(
+        "--scale", type=int, default=2, help="Display scale factor (default: 2)"
+    )
+    parser.add_argument(
+        "--stage-w",
+        type=int,
+        default=480,
+        help="Stage width in Scratch units (default: 480)",
+    )
+    parser.add_argument(
+        "--stage-h",
+        type=int,
+        default=360,
+        help="Stage height in Scratch units (default: 360)",
+    )
+    parser.add_argument(
+        "--debug", action="store_true", help="Emit debug logging into generated modules"
+    )
+    parser.add_argument(
+        "--force",
+        action="store_true",
+        help="Overwrite the output directory if it already exists",
+    )
 
     args = parser.parse_args()
     level = logging.DEBUG if args.verbose else logging.INFO
@@ -8413,16 +8961,21 @@ def main():
         log.info("Running full pipeline: parse + emit")
         out = Path(args.output) if args.output else default_out
         if out.exists() and not args.force:
-            sys.exit(f"Output directory {out} already exists. Use --force to overwrite.")
+            sys.exit(
+                f"Output directory {out} already exists. Use --force to overwrite."
+            )
         if args.force and out.exists():
             import shutil
+
             def _on_rm_error(func, path, exc):
                 try:
                     import stat
+
                     os.chmod(path, stat.S_IWRITE)
                     func(path)
                 except Exception:
                     pass
+
             shutil.rmtree(out, onerror=_on_rm_error)
         out.mkdir(parents=True, exist_ok=True)
         if project.suffix.lower() == ".sb3":
@@ -8441,13 +8994,19 @@ def main():
             ir_path = Path(args.output) if args.output else Path("ir.json")
 
         if not ir_path.exists():
-            print(f"IR file not found: {ir_path}. Run 'parse' first or use 'all'.",
-                  file=sys.stderr)
+            print(
+                f"IR file not found: {ir_path}. Run 'parse' first or use 'all'.",
+                file=sys.stderr,
+            )
             sys.exit(1)
 
         with open(ir_path, encoding="utf-8") as f:
             ir_data = json.load(f)
-        out_dir = Path(args.output) if args.output and Path(args.output).is_dir() else default_out
+        out_dir = (
+            Path(args.output)
+            if args.output and Path(args.output).is_dir()
+            else default_out
+        )
         emit_python(ir_data, out_dir, opts)
         print(f"Decompiled Python modules written to {out_dir}/")
         return
